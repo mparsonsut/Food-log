@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#ffffff" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Food Log" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <title>Food Log</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color-scheme: light; }
+    body { margin: 0; background: #f5f5f7; color: #111; }
+    header { position: sticky; top: 0; background: rgba(255,255,255,.95); padding: 16px 18px; border-bottom: 1px solid #ddd; z-index: 10; }
+    h1 { margin: 0; font-size: 28px; }
+    main { padding: 16px; max-width: 760px; margin: 0 auto 90px; }
+    .card { background: white; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+    .metric { background: #f4f4f6; border-radius: 12px; padding: 12px; text-align: center; }
+    .metric strong { display:block; font-size: 24px; }
+    .meal-title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .meal-title h2 { margin:0; font-size:20px; }
+    .entry { display:flex; justify-content:space-between; gap:12px; padding:10px 0; border-top:1px solid #eee; }
+    .entry:first-of-type { border-top:0; }
+    .muted { color:#666; font-size:14px; }
+    button { font: inherit; border:0; border-radius:10px; padding:10px 14px; background:#0a84ff; color:white; }
+    button.secondary { background:#e9e9ed; color:#111; }
+    button.danger { background:#ff3b30; }
+    .toolbar { position:fixed; left:0; right:0; bottom:0; display:flex; gap:8px; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:rgba(255,255,255,.96); border-top:1px solid #ddd; }
+    .toolbar button { flex:1; }
+    dialog { border:0; border-radius:16px; padding:0; width:min(92vw,520px); }
+    dialog::backdrop { background:rgba(0,0,0,.35); }
+    form { padding:18px; }
+    label { display:block; margin:12px 0 5px; font-weight:600; }
+    input, select { width:100%; box-sizing:border-box; font:inherit; padding:11px; border:1px solid #ccc; border-radius:10px; background:white; }
+    .dialog-actions { display:flex; gap:8px; margin-top:18px; }
+    .dialog-actions button { flex:1; }
+    .chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .chip { background:#f0f0f3; border-radius:999px; padding:7px 10px; font-size:13px; }
+    .empty { color:#777; font-style:italic; }
+  </style>
+</head>
+<body>
+  <header><h1>Food Log</h1></header>
+  <main>
+    <section class="card">
+      <h2 style="margin-top:0">Today Summary</h2>
+      <div class="summary-grid">
+        <div class="metric"><strong id="mainMeals">0/3</strong><span>Main Meals</span></div>
+        <div class="metric"><strong id="foodEntries">0</strong><span>Food Entries</span></div>
+        <div class="metric"><strong id="snacks">0</strong><span>Snacks</span></div>
+      </div>
+      <div id="categoryChips" class="chips"></div>
+    </section>
+
+    <div id="meals"></div>
+  </main>
+
+  <div class="toolbar">
+    <button id="addBtn">Add Food</button>
+    <button id="backupBtn" class="secondary">Backup</button>
+    <button id="restoreBtn" class="secondary">Restore</button>
+  </div>
+
+  <dialog id="entryDialog">
+    <form method="dialog" id="entryForm">
+      <h2 style="margin-top:0">Add Food</h2>
+      <label for="meal">Meal</label>
+      <select id="meal">
+        <option>Breakfast</option>
+        <option>Lunch</option>
+        <option>Dinner</option>
+        <option>Snack</option>
+      </select>
+
+      <label for="food">Food</label>
+      <input id="food" list="foodList" autocomplete="off" placeholder="e.g. Greek Yogurt" required />
+      <datalist id="foodList"></datalist>
+
+      <label for="quantity">Quantity</label>
+      <input id="quantity" value="1" />
+
+      <label for="unit">Unit</label>
+      <select id="unit">
+        <option>cup</option><option>tbsp</option><option>tsp</option><option>oz</option><option>lb</option>
+        <option>gram</option><option>slice</option><option>piece</option><option>serving</option><option>bowl</option>
+        <option>glass</option><option>small</option><option>medium</option><option>large</option>
+      </select>
+
+      <label for="category">Category</label>
+      <select id="category">
+        <option>Protein</option>
+        <option>Fruit / Vegetable</option>
+        <option>Carb / Starch</option>
+        <option>Dairy</option>
+        <option>Fat</option>
+        <option>Sugar / Sweets</option>
+        <option>Beverage</option>
+        <option>Other</option>
+      </select>
+
+      <div class="dialog-actions">
+        <button value="cancel" class="secondary">Cancel</button>
+        <button id="saveEntry" value="default">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <input type="file" id="restoreFile" accept="application/json,.json" hidden />
+
+<script>
+const MEALS = ["Breakfast","Lunch","Dinner","Snack"];
+const SAMPLE_FOODS = [
+  {name:"Eggs", category:"Protein", quantity:"2", unit:"piece"},
+  {name:"Chicken Breast", category:"Protein", quantity:"4", unit:"oz"},
+  {name:"Greek Yogurt", category:"Dairy", quantity:"1", unit:"cup"},
+  {name:"Whole Wheat Toast", category:"Carb / Starch", quantity:"1", unit:"slice"},
+  {name:"Blueberries", category:"Fruit / Vegetable", quantity:"1", unit:"cup"},
+  {name:"Apple", category:"Fruit / Vegetable", quantity:"1", unit:"medium"},
+  {name:"Almonds", category:"Fat", quantity:"1", unit:"oz"},
+  {name:"Green Salad", category:"Fruit / Vegetable", quantity:"1", unit:"bowl"}
+];
+const KEY = "foodLogPrototypeDataV1";
+
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : {entries:[], foods:SAMPLE_FOODS};
+  } catch { return {entries:[], foods:SAMPLE_FOODS}; }
+}
+let state = load();
+function save() { localStorage.setItem(KEY, JSON.stringify(state)); }
+
+function render() {
+  const today = todayKey();
+  const entries = state.entries.filter(e => e.date === today);
+  const mainCount = ["Breakfast","Lunch","Dinner"].filter(m => entries.some(e => e.meal===m)).length;
+  document.getElementById("mainMeals").textContent = `${mainCount}/3`;
+  document.getElementById("foodEntries").textContent = entries.length;
+  document.getElementById("snacks").textContent = entries.filter(e=>e.meal==="Snack").length;
+
+  const counts = {};
+  entries.forEach(e => counts[e.category]=(counts[e.category]||0)+1);
+  document.getElementById("categoryChips").innerHTML = Object.keys(counts).sort().map(c=>`<span class="chip">${escapeHtml(c)}: ${counts[c]}</span>`).join("");
+
+  const meals = document.getElementById("meals");
+  meals.innerHTML = "";
+  MEALS.forEach(meal => {
+    const card = document.createElement("section");
+    card.className = "card";
+    const mealEntries = entries.filter(e=>e.meal===meal);
+    card.innerHTML = `<div class="meal-title"><h2>${meal}</h2><button class="secondary" data-meal="${meal}">Add</button></div>` +
+      (mealEntries.length ? mealEntries.map(e => `
+        <div class="entry">
+          <div><strong>${escapeHtml(e.food)}</strong><div class="muted">${escapeHtml(e.quantity)} ${escapeHtml(e.unit)} · ${escapeHtml(e.category)}</div></div>
+          <button class="danger" data-delete="${e.id}">Delete</button>
+        </div>`).join("") : `<div class="empty">No entries</div>`);
+    meals.appendChild(card);
+  });
+
+  document.querySelectorAll("[data-meal]").forEach(b => b.onclick = () => openDialog(b.dataset.meal));
+  document.querySelectorAll("[data-delete]").forEach(b => b.onclick = () => {
+    state.entries = state.entries.filter(e=>e.id !== b.dataset.delete);
+    save(); render();
+  });
+
+  document.getElementById("foodList").innerHTML = state.foods.map(f=>`<option value="${escapeHtml(f.name)}"></option>`).join("");
+}
+
+function openDialog(meal="Breakfast") {
+  document.getElementById("meal").value = meal;
+  document.getElementById("food").value = "";
+  document.getElementById("quantity").value = "1";
+  document.getElementById("unit").value = "cup";
+  document.getElementById("category").value = "Other";
+  document.getElementById("entryDialog").showModal();
+}
+document.getElementById("addBtn").onclick = () => openDialog();
+
+document.getElementById("food").addEventListener("input", e => {
+  const match = state.foods.find(f => f.name.toLowerCase() === e.target.value.trim().toLowerCase());
+  if (match) {
+    document.getElementById("quantity").value = match.quantity;
+    document.getElementById("unit").value = match.unit;
+    document.getElementById("category").value = match.category;
+  }
+});
+
+document.getElementById("saveEntry").onclick = (event) => {
+  const food = document.getElementById("food").value.trim();
+  if (!food) { event.preventDefault(); return; }
+  const entry = {
+    id: crypto.randomUUID(),
+    date: todayKey(),
+    meal: document.getElementById("meal").value,
+    food,
+    quantity: document.getElementById("quantity").value.trim() || "1",
+    unit: document.getElementById("unit").value,
+    category: document.getElementById("category").value
+  };
+  state.entries.push(entry);
+  if (!state.foods.some(f=>f.name.toLowerCase()===food.toLowerCase())) {
+    state.foods.push({name:food, category:entry.category, quantity:entry.quantity, unit:entry.unit});
+  }
+  save();
+  setTimeout(render, 0);
+};
+
+document.getElementById("backupBtn").onclick = () => {
+  const backup = {backupVersion:1, createdAt:new Date().toISOString(), ...state};
+  const blob = new Blob([JSON.stringify(backup,null,2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `FoodLog-PWA-Backup-${todayKey()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+document.getElementById("restoreBtn").onclick = () => document.getElementById("restoreFile").click();
+document.getElementById("restoreFile").onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const obj = JSON.parse(await file.text());
+    if (!Array.isArray(obj.entries) || !Array.isArray(obj.foods)) throw new Error();
+    if (!confirm(`Restore ${obj.entries.length} entries and ${obj.foods.length} foods? This replaces current prototype data.`)) return;
+    state = {entries:obj.entries, foods:obj.foods};
+    save(); render();
+    alert("Backup restored.");
+  } catch {
+    alert("That file is not a valid Food Log PWA backup.");
+  } finally { e.target.value=""; }
+};
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+render();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("service-worker.js");
+}
+</script>
+</body>
+</html>
