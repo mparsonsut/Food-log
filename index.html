@@ -1,0 +1,1174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Food Log">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Food Log</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:#f5f5f7;color:#111}
+header{position:sticky;top:0;background:rgba(255,255,255,.97);padding:15px 18px;border-bottom:1px solid #ddd;z-index:10}
+h1{margin:0;font-size:28px}
+main{padding:14px;max-width:760px;margin:0 auto 92px}
+.card{background:#fff;border-radius:14px;padding:15px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.metric{background:#f2f2f5;border-radius:11px;padding:10px;text-align:center}
+.metric b{display:block;font-size:22px}
+.row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-top:1px solid #eee}
+.row:first-child{border-top:0}
+.muted{color:#666;font-size:13px}
+.empty{color:#777;font-style:italic;padding:8px 0}
+button{font:inherit;border:0;border-radius:10px;padding:9px 12px;background:#0a84ff;color:#fff}
+.secondary{background:#e9e9ed;color:#111}
+.danger{background:#ff3b30}
+.smallbtn{padding:7px 9px;font-size:13px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(255,255,255,.98);border-top:1px solid #ddd;padding:7px 8px calc(7px + env(safe-area-inset-bottom));z-index:20}
+.tabs button{flex:1;background:transparent;color:#555;padding:8px 3px;font-size:13px}
+.tabs button.active{color:#0a84ff;font-weight:700}
+input,select{width:100%;font:inherit;padding:11px;border:1px solid #ccc;border-radius:10px;background:#fff}
+label{display:block;font-weight:600;margin:11px 0 5px}
+dialog{border:0;border-radius:16px;padding:0;width:min(94vw,520px);max-height:92vh;overflow:auto}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+form{padding:18px}
+.actions{display:flex;gap:8px;margin-top:16px}
+.actions button{flex:1}
+.chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:9px}
+.chip{background:#f0f0f3;border-radius:999px;padding:6px 9px;font-size:13px}
+.search{margin-bottom:12px}
+.section-title{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.section-title h2{margin:0;font-size:20px}
+.segment{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:12px}
+.segment button{background:#e9e9ed;color:#111}
+.segment button.active{background:#0a84ff;color:#fff}
+.datebar{display:grid;grid-template-columns:42px 1fr 42px;align-items:center;gap:8px;margin-bottom:12px}
+.datebar strong{text-align:center}
+.pillrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.copygrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.summary-table{width:100%;border-collapse:collapse}
+.summary-table th,.summary-table td{text-align:left;padding:9px 6px;border-top:1px solid #eee;font-size:14px}
+.summary-table th{color:#555}
+.toolbar2{display:flex;gap:8px;flex-wrap:wrap}
+.notice{padding:10px;border-radius:10px;background:#f2f2f5;color:#444;font-size:13px;margin-top:10px}
+</style>
+</head>
+<body>
+<header><h1 id="pageTitle">Food Log</h1></header>
+<main id="app"></main>
+<nav class="tabs">
+<button data-tab="today" class="active">Today</button>
+<button data-tab="history">History</button>
+<button data-tab="foods">Foods</button>
+<button data-tab="bugs">Bugs</button>
+<button data-tab="settings">Settings</button>
+</nav>
+
+<dialog id="foodDialog">
+<form method="dialog" id="foodForm">
+<h2 id="dialogTitle" style="margin-top:0">Add Food</h2>
+<input type="hidden" id="editingId">
+<label>Date</label><input id="entryDate" type="date">
+<label>Meal</label><select id="meal"><option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option></select>
+<label>Food</label>
+<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center">
+  <input id="foodName" autocomplete="off" required>
+  <button type="button" id="browseFoods" class="secondary">Browse All</button>
+</div>
+<div id="foodSuggestions" style="margin-top:7px"></div>
+<label>Quantity</label><input id="quantity" value="1">
+<label>Unit</label><select id="unit"><option>cup</option><option>tbsp</option><option>tsp</option><option>oz</option><option>lb</option><option>gram</option><option>slice</option><option>piece</option><option>serving</option><option>bowl</option><option>glass</option><option>small</option><option>medium</option><option>large</option></select>
+<label>Category</label><select id="category"><option>Protein</option><option>Fruit / Vegetable</option><option>Carb / Starch</option><option>Dairy</option><option>Fat</option><option>Sugar / Sweets</option><option>Beverage</option><option>Other</option></select>
+<div class="actions"><button type="button" id="cancelFood" class="secondary">Cancel</button><button id="saveFood">Save</button></div>
+</form>
+</dialog>
+
+
+
+
+<dialog id="browseFoodsDialog">
+<form method="dialog">
+<h2 style="margin-top:0">Choose a Food</h2>
+<input id="browseFoodSearch" placeholder="Search foods" autocomplete="off">
+<div class="muted" style="margin:8px 0">Tap a food to select it. The list is alphabetical.</div>
+<div id="browseFoodList" style="max-height:55vh;overflow:auto;border-top:1px solid #eee"></div>
+<div class="actions">
+<button type="button" id="cancelBrowseFoods" class="secondary">Cancel</button>
+</div>
+</form>
+</dialog>
+
+<dialog id="bugDialog">
+<form method="dialog" id="bugForm">
+<h2 style="margin-top:0">Report a Bug</h2>
+<label>What happened?</label>
+<textarea id="bugWhat" rows="4" required style="width:100%;font:inherit;padding:11px;border:1px solid #ccc;border-radius:10px;resize:vertical"></textarea>
+<label>What were you trying to do?</label>
+<textarea id="bugTrying" rows="3" style="width:100%;font:inherit;padding:11px;border:1px solid #ccc;border-radius:10px;resize:vertical"></textarea>
+<label>What did you expect?</label>
+<textarea id="bugExpected" rows="3" style="width:100%;font:inherit;padding:11px;border:1px solid #ccc;border-radius:10px;resize:vertical"></textarea>
+<div class="notice">The report automatically includes the date/time, app version, current screen, and device/browser information. It stays on this device until you delete it.</div>
+<div class="actions">
+<button type="button" id="cancelBug" class="secondary">Cancel</button>
+<button id="saveBug">Save Bug</button>
+</div>
+</form>
+</dialog>
+
+<dialog id="savedFoodDialog">
+<form method="dialog" id="savedFoodForm">
+<h2 id="savedFoodTitle" style="margin-top:0">Add Saved Food</h2>
+<input type="hidden" id="originalSavedFoodName">
+<label>Food name</label><input id="savedFoodName" autocomplete="off" required>
+<label>Default quantity</label><input id="savedFoodQuantity" value="1">
+<label>Default unit</label><select id="savedFoodUnit">
+<option>cup</option><option>tbsp</option><option>tsp</option><option>oz</option><option>lb</option><option>gram</option>
+<option>slice</option><option>piece</option><option>serving</option><option>bowl</option><option>glass</option>
+<option>small</option><option>medium</option><option>large</option>
+</select>
+<label>Category</label><select id="savedFoodCategory">
+<option>Protein</option><option>Fruit / Vegetable</option><option>Carb / Starch</option><option>Dairy</option>
+<option>Fat</option><option>Sugar / Sweets</option><option>Beverage</option><option>Other</option>
+</select>
+<div class="actions">
+<button type="button" id="deleteSavedFood" class="danger" style="display:none">Delete Food</button>
+<button type="button" id="cancelSavedFood" class="secondary">Cancel</button>
+<button id="saveSavedFood">Save Food</button>
+</div>
+</form>
+</dialog>
+
+<dialog id="copyDialog">
+<form method="dialog">
+<h2 style="margin-top:0" id="copyTitle">Copy Meal From</h2>
+<label>Copy from date</label><input type="date" id="copySourceDate">
+<div class="notice" id="copyNotice"></div>
+<div class="actions"><button type="button" id="cancelCopy" class="secondary">Cancel</button><button id="confirmCopy">Copy</button></div>
+</form>
+</dialog>
+
+<script>
+const CATALOG=[{"name": "Almond Butter", "category": "Protein", "quantity": "2", "unit": "tbsp"}, {"name": "Bacon", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Beef Brisket", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Flank Steak", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Jerky", "category": "Protein", "quantity": "1", "unit": "oz"}, {"name": "Beef New York Strip Steak", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Pot Roast", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Ribeye Steak", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Sirloin Steak", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Skirt Steak", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef Tenderloin", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef, Ground, 80% Lean", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Beef, Ground, 90% Lean", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Bison, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Black Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Breakfast Sausage", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Canadian Bacon", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Canned Salmon", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Canned Tuna, Water Packed", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Cannellini Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Cashew Butter", "category": "Protein", "quantity": "2", "unit": "tbsp"}, {"name": "Chicken Breast, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Chicken Sausage", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Chicken Tenderloin, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Chicken Thigh, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Clams, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Cod, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Crab Meat", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Edamame, Shelled", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Egg Whites", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Egg, Fried", "category": "Protein", "quantity": "2", "unit": "piece"}, {"name": "Egg, Hard-Boiled", "category": "Protein", "quantity": "2", "unit": "piece"}, {"name": "Egg, Large", "category": "Protein", "quantity": "2", "unit": "piece"}, {"name": "Egg, Scrambled", "category": "Protein", "quantity": "2", "unit": "piece"}, {"name": "Falafel", "category": "Protein", "quantity": "3", "unit": "piece"}, {"name": "Garbanzo Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Halibut, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Ham, Sliced", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Hummus", "category": "Protein", "quantity": "1/4", "unit": "cup"}, {"name": "Kidney Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Lamb Chop", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Lamb Leg, Roasted", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Lentils, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Lima Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Lobster Meat", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Mahi Mahi, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Mussels, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Navy Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Peanut Butter", "category": "Protein", "quantity": "2", "unit": "tbsp"}, {"name": "Pinto Beans, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Pork Loin Chop", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Pork Sausage", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Pork Shoulder, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Pork Tenderloin", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Prosciutto", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Rotisserie Chicken", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Salmon, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Sardines", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Scallops, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Seitan", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Shrimp, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Smoked Salmon", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Split Peas, Cooked", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Sunflower Seed Butter", "category": "Protein", "quantity": "2", "unit": "tbsp"}, {"name": "Swordfish, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Tempeh", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Tilapia, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Tofu, Firm", "category": "Protein", "quantity": "1/2", "unit": "cup"}, {"name": "Trout, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Tuna Steak, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Turkey Breast, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Turkey Burger", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Turkey Jerky", "category": "Protein", "quantity": "1", "unit": "oz"}, {"name": "Turkey Sausage", "category": "Protein", "quantity": "2", "unit": "oz"}, {"name": "Turkey, Ground, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Venison, Cooked", "category": "Protein", "quantity": "4", "unit": "oz"}, {"name": "Acorn Squash, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Apple", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Apricot", "category": "Fruit / Vegetable", "quantity": "2", "unit": "piece"}, {"name": "Artichoke Hearts", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Arugula", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Asparagus, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Avocado", "category": "Fruit / Vegetable", "quantity": "1/2", "unit": "piece"}, {"name": "Baked Potato", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Banana", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Bean Sprouts", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Beets, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Bell Pepper, Chopped", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Blackberries", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Blueberries", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Bok Choy, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Broccoli, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Brussels Sprouts, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Butternut Squash, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cabbage, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cantaloupe, Cubed", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Carrots, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Carrots, Raw", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cauliflower, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Celery, Chopped", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cherries", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cherry Tomatoes", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Clementine", "category": "Fruit / Vegetable", "quantity": "2", "unit": "piece"}, {"name": "Coconut, Shredded", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Coleslaw Mix", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Collard Greens, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Corn, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Cucumber, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Dates, Chopped", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Dried Apricots", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Dried Cherries", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Dried Cranberries", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Eggplant, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Fennel, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Fig, Fresh", "category": "Fruit / Vegetable", "quantity": "2", "unit": "piece"}, {"name": "Fruit Salad", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Grapefruit", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Grapes", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Green Beans, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Green Peppers, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Hearts of Palm", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Honeydew Melon, Cubed", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Jicama, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Kale, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Kale, Raw", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Kimchi", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Kiwi", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Leeks, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Lemon", "category": "Fruit / Vegetable", "quantity": "1", "unit": "piece"}, {"name": "Lime", "category": "Fruit / Vegetable", "quantity": "1", "unit": "piece"}, {"name": "Mandarin Orange", "category": "Fruit / Vegetable", "quantity": "2", "unit": "piece"}, {"name": "Mango", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Mango, Cubed", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Mixed Berries", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Mixed Salad Greens", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Mixed Vegetables, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Mushrooms, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Nectarine", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Okra, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Onion, Chopped", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Orange", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Papaya, Cubed", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Parsnips, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Peach", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Peaches, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Pear", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Pears, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Peas, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Persimmon", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Pineapple, Chunks", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Plantain, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Plum", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Pomegranate", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Prunes", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Radishes", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Raisins", "category": "Fruit / Vegetable", "quantity": "1/4", "unit": "cup"}, {"name": "Raspberries", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Red Peppers, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Roasted Vegetables", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Romaine Lettuce", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Sauerkraut", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Snap Peas", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Snow Peas, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Spaghetti Squash, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Spinach, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Spinach, Raw", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Spring Mix", "category": "Fruit / Vegetable", "quantity": "2", "unit": "cup"}, {"name": "Strawberries, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Sweet Potato, Baked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "medium"}, {"name": "Swiss Chard, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Tomato, Sliced", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Turnips, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Watermelon, Cubed", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Yellow Squash, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Zucchini, Cooked", "category": "Fruit / Vegetable", "quantity": "1", "unit": "cup"}, {"name": "Bagel", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Barley, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Basmati Rice, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Biscuit", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Breakfast Cereal", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Brown Rice, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Buckwheat, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Bulgur, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Cereal Bar", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Corn Tortilla", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Cornbread", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Couscous, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Crackers", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Cream of Wheat, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Dinner Roll", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Egg Noodles, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "English Muffin", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Farro, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Flour Tortilla", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "French Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "French Fries", "category": "Carb / Starch", "quantity": "4", "unit": "oz"}, {"name": "Garlic Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Gluten-Free Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Granola", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Granola Bar", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Grits, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Hamburger Bun", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Hash Browns", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Hot Dog Bun", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Jasmine Rice, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Macaroni, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Mashed Potatoes", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Muesli", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Multigrain Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Naan", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Oatmeal, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Pancake", "category": "Carb / Starch", "quantity": "2", "unit": "piece"}, {"name": "Pasta, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Penne, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Pita Bread", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Pita Chips", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Polenta, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Popcorn, Popped", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Potato Chips", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Pretzels", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Quinoa, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Ramen Noodles, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Rice Cake", "category": "Carb / Starch", "quantity": "2", "unit": "piece"}, {"name": "Rice Noodles, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Rye Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Sourdough Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Spaghetti, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Stuffing, Prepared", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Sweet Potato Fries", "category": "Carb / Starch", "quantity": "4", "unit": "oz"}, {"name": "Tater Tots", "category": "Carb / Starch", "quantity": "4", "unit": "oz"}, {"name": "Tortilla Chips", "category": "Carb / Starch", "quantity": "1", "unit": "oz"}, {"name": "Waffle", "category": "Carb / Starch", "quantity": "2", "unit": "piece"}, {"name": "White Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "White Rice, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Whole Wheat Bread", "category": "Carb / Starch", "quantity": "1", "unit": "slice"}, {"name": "Whole Wheat Tortilla", "category": "Carb / Starch", "quantity": "1", "unit": "piece"}, {"name": "Wild Rice, Cooked", "category": "Carb / Starch", "quantity": "1", "unit": "cup"}, {"name": "Almond Milk, Unsweetened", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Brie Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Cheddar Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Chocolate Milk", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Cottage Cheese", "category": "Dairy", "quantity": "1/2", "unit": "cup"}, {"name": "Cream Cheese", "category": "Dairy", "quantity": "2", "unit": "tbsp"}, {"name": "Feta Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Goat Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Gouda Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Greek Yogurt, Flavored", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Greek Yogurt, Plain", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Half-and-Half", "category": "Dairy", "quantity": "2", "unit": "tbsp"}, {"name": "Heavy Cream", "category": "Dairy", "quantity": "2", "unit": "tbsp"}, {"name": "Kefir", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Lactose-Free Milk", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Milk, 1%", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Milk, 2%", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Milk, Skim", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Milk, Whole", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Monterey Jack Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Mozzarella Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Oat Milk, Unsweetened", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Parmesan Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Pepper Jack Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Provolone Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Ricotta Cheese", "category": "Dairy", "quantity": "1/2", "unit": "cup"}, {"name": "Sour Cream", "category": "Dairy", "quantity": "2", "unit": "tbsp"}, {"name": "Soy Milk, Fortified", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Swiss Cheese", "category": "Dairy", "quantity": "1", "unit": "oz"}, {"name": "Whipped Cream", "category": "Dairy", "quantity": "2", "unit": "tbsp"}, {"name": "Yogurt, Flavored", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Yogurt, Plain", "category": "Dairy", "quantity": "1", "unit": "cup"}, {"name": "Aioli", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Almonds", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Avocado Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Blue Cheese Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Butter", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Caesar Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Canola Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Cashews", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Chia Seeds", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Coconut Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Flax Seeds", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Ghee", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Guacamole", "category": "Fat", "quantity": "1/4", "unit": "cup"}, {"name": "Italian Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Macadamia Nuts", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Margarine", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Mayonnaise", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Olive Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Pecans", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Pistachios", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Pumpkin Seeds", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Ranch Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Sesame Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Sunflower Seeds", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Tahini", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Thousand Island Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Vegetable Oil", "category": "Fat", "quantity": "1", "unit": "tbsp"}, {"name": "Vinaigrette Dressing", "category": "Fat", "quantity": "2", "unit": "tbsp"}, {"name": "Walnuts", "category": "Fat", "quantity": "1", "unit": "oz"}, {"name": "Brownie", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Candy", "category": "Sugar / Sweets", "quantity": "1", "unit": "oz"}, {"name": "Cheesecake", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Chocolate Cake", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Chocolate Chip Cookie", "category": "Sugar / Sweets", "quantity": "2", "unit": "piece"}, {"name": "Chocolate Syrup", "category": "Sugar / Sweets", "quantity": "1", "unit": "tbsp"}, {"name": "Cupcake", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Custard", "category": "Sugar / Sweets", "quantity": "1/2", "unit": "cup"}, {"name": "Dark Chocolate", "category": "Sugar / Sweets", "quantity": "1", "unit": "oz"}, {"name": "Frozen Yogurt", "category": "Sugar / Sweets", "quantity": "2/3", "unit": "cup"}, {"name": "Gelato", "category": "Sugar / Sweets", "quantity": "2/3", "unit": "cup"}, {"name": "Gummy Candy", "category": "Sugar / Sweets", "quantity": "1", "unit": "oz"}, {"name": "Honey", "category": "Sugar / Sweets", "quantity": "1", "unit": "tbsp"}, {"name": "Ice Cream", "category": "Sugar / Sweets", "quantity": "2/3", "unit": "cup"}, {"name": "Jam", "category": "Sugar / Sweets", "quantity": "1", "unit": "tbsp"}, {"name": "Jelly", "category": "Sugar / Sweets", "quantity": "1", "unit": "tbsp"}, {"name": "Maple Syrup", "category": "Sugar / Sweets", "quantity": "1", "unit": "tbsp"}, {"name": "Milk Chocolate", "category": "Sugar / Sweets", "quantity": "1", "unit": "oz"}, {"name": "Muffin", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Nutella / Hazelnut Spread", "category": "Sugar / Sweets", "quantity": "2", "unit": "tbsp"}, {"name": "Oatmeal Cookie", "category": "Sugar / Sweets", "quantity": "2", "unit": "piece"}, {"name": "Peanut Butter Cookie", "category": "Sugar / Sweets", "quantity": "2", "unit": "piece"}, {"name": "Pie", "category": "Sugar / Sweets", "quantity": "1", "unit": "slice"}, {"name": "Pudding", "category": "Sugar / Sweets", "quantity": "1/2", "unit": "cup"}, {"name": "Sorbet", "category": "Sugar / Sweets", "quantity": "2/3", "unit": "cup"}, {"name": "Sugar Cookie", "category": "Sugar / Sweets", "quantity": "2", "unit": "piece"}, {"name": "Vanilla Cake", "category": "Sugar / Sweets", "quantity": "1", "unit": "piece"}, {"name": "Apple Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Cappuccino", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Coconut Water", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Coffee, Black", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Cranberry Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Diet Soda", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Energy Drink", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Fruit Punch", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Grape Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Herbal Tea", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Hot Chocolate", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Iced Tea, Unsweetened", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Latte", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Lemonade", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Milkshake", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Mocha", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Orange Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Protein Shake", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Smoothie", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Soda", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Sparkling Water", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Sports Drink", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Sweet Tea", "category": "Beverage", "quantity": "12", "unit": "oz"}, {"name": "Tea, Unsweetened", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Tomato Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Vegetable Juice", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Water", "category": "Beverage", "quantity": "1", "unit": "glass"}, {"name": "Beef Curry", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Beef Stew", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Beef Stir-Fry", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Burrito", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Caesar Salad", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Casserole", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Cheeseburger", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Chicken Curry", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Chicken Noodle Soup", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Chicken Pot Pie", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Chicken Sandwich", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Chicken Stir-Fry", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Chili", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Cobb Salad", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Egg Roll", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Fried Rice", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Greek Salad", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Green Salad with Dressing", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Grilled Cheese Sandwich", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Hamburger", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Hot Dog", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Lasagna", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Macaroni and Cheese", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Meatloaf", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Minestrone Soup", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Pad Thai", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Pho", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Pizza", "category": "Other", "quantity": "2", "unit": "slice"}, {"name": "Quesadilla", "category": "Other", "quantity": "2", "unit": "slice"}, {"name": "Ramen Bowl", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Risotto", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Shepherd's Pie", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Spaghetti with Meat Sauce", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Spring Roll", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Sushi Roll", "category": "Other", "quantity": "1", "unit": "serving"}, {"name": "Taco", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Tomato Soup", "category": "Other", "quantity": "1", "unit": "bowl"}, {"name": "Turkey Sandwich", "category": "Other", "quantity": "1", "unit": "piece"}, {"name": "Vegetable Soup", "category": "Other", "quantity": "1", "unit": "bowl"}];
+const MEALS=["Breakfast","Lunch","Dinner","Snack"];
+const DBNAME="FoodLogDB";
+const DBVER=3;
+const SHADOW_KEY="FoodLog_AutoShadow_v1";
+let shadowTimer=null;
+let suppressShadow=false;
+let db;
+let tab="today";
+let historyMode="day";
+let historyDate=new Date();
+let historySummaryMode="quantity";
+let copyMealName=null;
+
+function req(r){return new Promise((res,rej)=>{r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function openDB(){
+  db=await new Promise((res,rej)=>{
+    const r=indexedDB.open(DBNAME,DBVER);
+    r.onupgradeneeded=()=>{
+      const d=r.result;
+      if(!d.objectStoreNames.contains("entries")) d.createObjectStore("entries",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("foods")) d.createObjectStore("foods",{keyPath:"name"});
+      if(!d.objectStoreNames.contains("bugReports")) d.createObjectStore("bugReports",{keyPath:"id"});
+      if(!d.objectStoreNames.contains("settings")) d.createObjectStore("settings",{keyPath:"key"});
+      if(!d.objectStoreNames.contains("categories")) d.createObjectStore("categories",{keyPath:"name"});
+    };
+    r.onsuccess=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+function store(n,m="readonly"){return db.transaction(n,m).objectStore(n)}
+async function all(n){return req(store(n).getAll())}
+async function put(n,o){
+  const result=await req(store(n,"readwrite").put(o));
+  scheduleShadowSnapshot();
+  scheduleCloudSnapshot();
+  return result;
+}
+async function del(n,k){
+  const result=await req(store(n,"readwrite").delete(k));
+  scheduleShadowSnapshot();
+  scheduleCloudSnapshot();
+  return result;
+}
+
+function scheduleShadowSnapshot(){
+  if(suppressShadow || !db) return;
+  clearTimeout(shadowTimer);
+  shadowTimer=setTimeout(()=>saveShadowSnapshot(),200);
+}
+
+async function saveShadowSnapshot(){
+  if(suppressShadow || !db) return;
+  try{
+    const data={
+      format:"FoodLog-AutoShadow",
+      version:1,
+      savedAt:new Date().toISOString(),
+      entries:await all("entries"),
+      foods:await all("foods"),
+      categories:await all("categories"),
+      settings:await all("settings"),
+      bugReports:await all("bugReports")
+    };
+    localStorage.setItem(SHADOW_KEY,JSON.stringify(data));
+  }catch(err){
+    console.warn("Automatic persistence snapshot failed",err);
+  }
+}
+
+async function rawPut(name,obj){
+  return req(store(name,"readwrite").put(obj));
+}
+async function rawClearStore(name){
+  const tx=db.transaction(name,"readwrite");
+  tx.objectStore(name).clear();
+  await new Promise((res,rej)=>{
+    tx.oncomplete=res;
+    tx.onerror=()=>rej(tx.error);
+  });
+}
+
+async function restoreShadowIfDatabaseEmpty(){
+  let shadow=null;
+  try{
+    shadow=JSON.parse(localStorage.getItem(SHADOW_KEY)||"null");
+  }catch{}
+  if(!shadow || shadow.format!=="FoodLog-AutoShadow") return false;
+
+  const [entries,foods,categories,settings,bugs]=await Promise.all([
+    all("entries"),all("foods"),all("categories"),all("settings"),all("bugReports")
+  ]);
+
+  if(entries.length || foods.length || categories.length || settings.length || bugs.length){
+    return false;
+  }
+
+  suppressShadow=true;
+  try{
+    for(const x of shadow.entries||[]) await rawPut("entries",x);
+    for(const x of shadow.foods||[]) await rawPut("foods",x);
+    for(const x of shadow.categories||[]) await rawPut("categories",x);
+    for(const x of shadow.settings||[]) await rawPut("settings",x);
+    for(const x of shadow.bugReports||[]) await rawPut("bugReports",x);
+  }finally{
+    suppressShadow=false;
+  }
+  return true;
+}
+
+async function seedCatalogOnlyIfNeeded(){
+  const foods=await all("foods");
+  if(foods.length) return;
+  suppressShadow=true;
+  try{
+    for(const f of CATALOG) await rawPut("foods",f);
+  }finally{
+    suppressShadow=false;
+  }
+}
+
+function localDay(d=new Date()){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function parseDay(s){const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)}
+function addDays(d,n){const x=new Date(d);x.setDate(x.getDate()+n);return x}
+function startOfWeek(d){const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x}
+function startOfMonth(d){return new Date(d.getFullYear(),d.getMonth(),1)}
+function formatDate(d,opts={weekday:"short",month:"short",day:"numeric"}){return d.toLocaleDateString(undefined,opts)}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+function qtyNumber(s){
+  s=String(s).trim();
+  if(s.includes(" ")){
+    const p=s.split(" "); return qtyNumber(p[0])+qtyNumber(p[1]);
+  }
+  if(s.includes("/")){const [a,b]=s.split("/").map(Number);return b?a/b:0}
+  const n=Number(s); return Number.isFinite(n)?n:0;
+}
+function fmt(n){return Math.abs(n-Math.round(n))<0.0001?String(Math.round(n)):String(Math.round(n*100)/100)}
+function normalizedQuantity(e){
+  const q=qtyNumber(e.quantity), u=e.unit;
+  if(["oz","lb","gram"].includes(u)){
+    const oz=u==="oz"?q:u==="lb"?q*16:q/28.3495; return {amount:oz,unit:"oz"};
+  }
+  if(["cup","tbsp","tsp"].includes(u)){
+    const cup=u==="cup"?q:u==="tbsp"?q/16:q/48; return {amount:cup,unit:"cup"};
+  }
+  return {amount:q,unit:u};
+}
+
+async function render(){
+  document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+  pageTitle.textContent=tab==="today"?"Food Log":tab==="history"?"History":tab==="foods"?"Foods":tab==="bugs"?"Bug Reports":"Settings";
+  if(tab==="today") await renderToday();
+  else if(tab==="history") await renderHistory();
+  else if(tab==="foods") await renderFoods();
+  else if(tab==="bugs") await renderBugs();
+  else await renderSettings();
+}
+
+async function renderToday(){
+  const allEntries=await all("entries");
+  const entries=allEntries.filter(e=>e.date===localDay());
+  const main=["Breakfast","Lunch","Dinner"].filter(m=>entries.some(e=>e.meal===m)).length;
+  const counts={}; entries.forEach(e=>counts[e.category]=(counts[e.category]||0)+1);
+
+  let h=`<section class="card"><div class="section-title"><h2>Today Summary</h2><button id="topAdd">Add Food</button></div>
+    <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${entries.length}</b>Food Entries</div><div class="metric"><b>${entries.filter(e=>e.meal==="Snack").length}</b>Snacks</div></div>
+    <div class="chips">${Object.keys(counts).sort().map(c=>`<span class="chip">${esc(c)}: ${counts[c]}</span>`).join("")}</div></section>`;
+
+  const showRecent=await getSetting("showRecent",true);
+  const showFrequent=await getSetting("showFrequent",true);
+
+  // Use the actual logged date first, then createdAt as a tie-breaker.
+  // This works for both older 2B records and newer 2C records.
+  const ordered=[...allEntries].sort((a,b)=>{
+    const byDate=String(b.date||"").localeCompare(String(a.date||""));
+    if(byDate!==0) return byDate;
+    return String(b.createdAt||"").localeCompare(String(a.createdAt||""));
+  });
+
+  const seen=new Set();
+  const recent=[];
+  for(const e of ordered){
+    const key=String(e.foodName||"").trim().toLowerCase();
+    if(key && !seen.has(key)){
+      seen.add(key);
+      recent.push(e);
+      if(recent.length===5) break;
+    }
+  }
+
+  const freq={};
+  for(const e of allEntries){
+    const name=String(e.foodName||"").trim();
+    if(!name) continue;
+    const key=name.toLowerCase();
+    if(!freq[key]) freq[key]={name,count:0};
+    freq[key].count++;
+  }
+  const frequent=Object.values(freq)
+    .sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name))
+    .slice(0,5);
+
+  if(showRecent){
+    h+=`<section class="card"><h2 style="margin-top:0;font-size:20px">Recent Foods</h2>
+      ${recent.length
+        ? recent.map(e=>`<button class="secondary smallbtn quickFood" data-food="${esc(e.foodName)}">${esc(e.foodName)}</button> `).join("")
+        : '<div class="empty">Recent foods will appear after you log foods.</div>'}
+    </section>`;
+  }
+
+  if(showFrequent){
+    h+=`<section class="card"><h2 style="margin-top:0;font-size:20px">Frequent Foods</h2>
+      ${frequent.length
+        ? frequent.map(x=>`<button class="secondary smallbtn quickFood" data-food="${esc(x.name)}">${esc(x.name)}</button> `).join("")
+        : '<div class="empty">Frequent foods will appear as you build meal history.</div>'}
+    </section>`;
+  }
+
+  for(const mealName of MEALS){
+    const es=entries.filter(e=>e.meal===mealName);
+    h+=`<section class="card"><div class="section-title"><h2>${mealName}</h2><button class="secondary smallbtn addMeal" data-meal="${mealName}">Add</button></div>
+    ${es.length?es.map(e=>entryRow(e,true)).join(""):'<div class="empty">No entries</div>'}</section>`;
+  }
+
+  app.innerHTML=h;
+  topAdd.onclick=()=>openFood({date:localDay()});
+  document.querySelectorAll(".addMeal").forEach(b=>b.onclick=()=>openFood({date:localDay(),meal:b.dataset.meal}));
+  document.querySelectorAll(".quickFood").forEach(b=>b.onclick=()=>openFood({date:localDay(),foodName:b.dataset.food}));
+  bindEntryButtons();
+}
+function entryRow(e,showEdit){
+  return `<div class="row"><div><b>${esc(e.foodName)}</b><div class="muted">${esc(e.quantity)} ${esc(e.unit)} · ${esc(e.category)}</div></div>
+  <div class="toolbar2">${showEdit?`<button class="secondary smallbtn editEntry" data-id="${e.id}">Edit</button>`:""}<button class="danger smallbtn deleteEntry" data-id="${e.id}">Delete</button></div></div>`;
+}
+function bindEntryButtons(){
+  document.querySelectorAll(".deleteEntry").forEach(b=>b.onclick=async()=>{if(confirm("Delete this food entry?")){await del("entries",b.dataset.id);render()}});
+  document.querySelectorAll(".editEntry").forEach(b=>b.onclick=async()=>{const es=await all("entries"); const e=es.find(x=>x.id===b.dataset.id); if(e) openFood(e)});
+}
+
+async function renderHistory(){
+  let h=`<div class="segment">
+    <button class="${historyMode==="day"?"active":""}" data-mode="day">Day</button>
+    <button class="${historyMode==="week"?"active":""}" data-mode="week">Week</button>
+    <button class="${historyMode==="month"?"active":""}" data-mode="month">Month</button>
+  </div>
+  <div class="datebar"><button class="secondary" id="prevDate">‹</button><strong id="historyLabel"></strong><button class="secondary" id="nextDate">›</button></div>
+  <div id="historyBody"></div>`;
+  app.innerHTML=h;
+  document.querySelectorAll("[data-mode]").forEach(b=>b.onclick=()=>{historyMode=b.dataset.mode;renderHistory()});
+  prevDate.onclick=()=>{historyDate=shiftHistory(-1);renderHistory()};
+  nextDate.onclick=()=>{historyDate=shiftHistory(1);renderHistory()};
+  await renderHistoryBody();
+}
+function shiftHistory(dir){
+  if(historyMode==="day") return addDays(historyDate,dir);
+  if(historyMode==="week") return addDays(historyDate,dir*7);
+  return new Date(historyDate.getFullYear(),historyDate.getMonth()+dir,1);
+}
+async function renderHistoryBody(){
+  const entries=await all("entries");
+  if(historyMode==="day"){
+    const d=localDay(historyDate); historyLabel.textContent=formatDate(historyDate,{weekday:"short",month:"short",day:"numeric",year:"numeric"});
+    const es=entries.filter(e=>e.date===d);
+    let h=`<section class="card"><div class="section-title"><h2>${d===localDay()?"Today":"Entries"}</h2><button id="historyAdd">Add Food</button></div>`;
+    for(const mealName of MEALS){
+      const m=es.filter(e=>e.meal===mealName);
+      h+=`<div style="margin-top:14px"><div class="section-title"><b>${mealName}</b><div class="toolbar2">
+      <button class="secondary smallbtn repeatMeal" data-meal="${mealName}">Repeat Previous</button>
+      <button class="secondary smallbtn copyMeal" data-meal="${mealName}">Copy From</button></div></div>
+      ${m.length?m.map(e=>entryRow(e,true)).join(""):'<div class="empty">No entries</div>'}</div>`;
+    }
+    h+=`</section>`;
+    historyBody.innerHTML=h;
+    historyAdd.onclick=()=>openFood({date:d});
+    bindEntryButtons();
+    document.querySelectorAll(".repeatMeal").forEach(b=>b.onclick=()=>repeatPreviousMeal(d,b.dataset.meal));
+    document.querySelectorAll(".copyMeal").forEach(b=>b.onclick=()=>openCopyDialog(d,b.dataset.meal));
+  } else {
+    let start,end,label;
+    if(historyMode==="week"){
+      start=startOfWeek(historyDate); end=addDays(start,6);
+      label=`${formatDate(start,{month:"short",day:"numeric"})} - ${formatDate(end,{month:"short",day:"numeric",year:"numeric"})}`;
+    } else {
+      start=startOfMonth(historyDate); end=new Date(start.getFullYear(),start.getMonth()+1,0);
+      label=formatDate(start,{month:"long",year:"numeric"});
+    }
+    historyLabel.textContent=label;
+    const a=localDay(start), b=localDay(end);
+    const es=entries.filter(e=>e.date>=a && e.date<=b);
+    historyBody.innerHTML=summaryHistory(es);
+    document.querySelectorAll("[data-summarymode]").forEach(btn=>btn.onclick=()=>{historySummaryMode=btn.dataset.summarymode;renderHistoryBody()});
+  }
+}
+function summaryHistory(es){
+  const modeButtons=`<div class="segment" style="grid-template-columns:1fr 1fr">
+    <button class="${historySummaryMode==="quantity"?"active":""}" data-summarymode="quantity">Quantity</button>
+    <button class="${historySummaryMode==="frequency"?"active":""}" data-summarymode="frequency">Frequency</button>
+  </div>`;
+  if(!es.length) return modeButtons+`<section class="card"><div class="empty">No entries in this period</div></section>`;
+  if(historySummaryMode==="frequency"){
+    const c={}; es.forEach(e=>c[e.foodName]=(c[e.foodName]||0)+1);
+    const rows=Object.entries(c).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+    return modeButtons+`<section class="card"><table class="summary-table"><tr><th>Food</th><th>Times</th></tr>${rows.map(([n,v])=>`<tr><td>${esc(n)}</td><td>${v}</td></tr>`).join("")}</table></section>`;
+  }
+  const q={};
+  es.forEach(e=>{const n=normalizedQuantity(e); const key=e.foodName+"|||"+n.unit; q[key]=(q[key]||0)+n.amount});
+  const rows=Object.entries(q).map(([k,v])=>{const [name,unit]=k.split("|||");return {name,unit,value:v}}).sort((a,b)=>a.name.localeCompare(b.name)||a.unit.localeCompare(b.unit));
+  return modeButtons+`<section class="card"><table class="summary-table"><tr><th>Food</th><th>Total</th></tr>${rows.map(r=>`<tr><td>${esc(r.name)}</td><td>${fmt(r.value)} ${esc(r.unit)}</td></tr>`).join("")}</table></section>`;
+}
+
+async function repeatPreviousMeal(targetDate,mealName){
+  const entries=await all("entries");
+  const dates=[...new Set(entries.filter(e=>e.meal===mealName && e.date<targetDate).map(e=>e.date))].sort().reverse();
+  if(!dates.length){alert("No previous "+mealName+" found.");return}
+  const source=dates[0];
+  const sourceEntries=entries.filter(e=>e.date===source && e.meal===mealName);
+  const existing=entries.some(e=>e.date===targetDate && e.meal===mealName);
+  if(existing && !confirm(mealName+" already has entries on this date. Add the previous meal anyway?")) return;
+  await copyEntries(sourceEntries,targetDate);
+  renderHistoryBody();
+}
+function openCopyDialog(targetDate,mealName){
+  copyMealName={targetDate,mealName};
+  copyTitle.textContent=mealName==="Snack"?"Copy Snacks From":"Copy "+mealName+" From";
+  copySourceDate.value=localDay(addDays(parseDay(targetDate),-1));
+  copySourceDate.max=localDay(addDays(parseDay(targetDate),-1));
+  copyNotice.textContent="Choose an earlier date. The selected "+mealName.toLowerCase()+" entries will be added to "+targetDate+".";
+  copyDialog.showModal();
+}
+confirmCopy.onclick=async e=>{
+  e.preventDefault();
+  if(!copyMealName) return;
+  const src=copySourceDate.value;
+  if(!src || src>=copyMealName.targetDate){alert("Choose a date before the target date.");return}
+  const entries=await all("entries");
+  const source=entries.filter(x=>x.date===src && x.meal===copyMealName.mealName);
+  if(!source.length){alert("No "+copyMealName.mealName+" entries were found on that date.");return}
+  const existing=entries.some(x=>x.date===copyMealName.targetDate && x.meal===copyMealName.mealName);
+  if(existing && !confirm(copyMealName.mealName+" already has entries on the target date. Add the copied meal anyway?")) return;
+  await copyEntries(source,copyMealName.targetDate);
+  copyDialog.close(); copyMealName=null; await renderHistoryBody();
+};
+async function copyEntries(source,targetDate){
+  for(const e of source){
+    await put("entries",{...e,id:crypto.randomUUID(),date:targetDate,createdAt:new Date().toISOString()});
+  }
+}
+
+
+
+async function getSetting(key, fallback){
+  const v=await req(store("settings").get(key));
+  return v ? v.value : fallback;
+}
+async function setSetting(key,value){ await put("settings",{key,value}); }
+
+async function ensureCategories(){
+  const existing=await all("categories");
+  if(existing.length) return;
+  const defaults=["Protein","Fruit / Vegetable","Carb / Starch","Dairy","Fat","Sugar / Sweets","Beverage","Other"];
+  for(const name of defaults) await put("categories",{name});
+}
+async function categoryNames(){
+  await ensureCategories();
+  return (await all("categories")).map(x=>x.name).sort((a,b)=>a.localeCompare(b));
+}
+async function refreshCategorySelects(){
+  const cats=await categoryNames();
+  const html=cats.map(c=>`<option>${esc(c)}</option>`).join("");
+  category.innerHTML=html;
+  savedFoodCategory.innerHTML=html;
+}
+
+// Firebase cloud persistence -------------------------------------------------
+const FIREBASE_CONFIG={
+  apiKey:"AIzaSyCIO1IKlPBvlYSROJ8LUF5-FCNcMcYKNC4",
+  authDomain:"food-log-50b4a.firebaseapp.com",
+  projectId:"food-log-50b4a",
+  storageBucket:"food-log-50b4a.firebasestorage.app",
+  messagingSenderId:"1031069746301",
+  appId:"1:1031069746301:web:ff6d47d4537741eefa9d14"
+};
+let firebaseApi=null, firebaseAuth=null, firestoreDb=null, firebaseUser=null;
+let cloudTimer=null, cloudBusy=false, suppressCloud=false, cloudMessage="Loading Firebase…";
+
+function scheduleCloudSnapshot(){
+  if(suppressCloud || !firebaseUser || !firestoreDb || !firebaseApi) return;
+  clearTimeout(cloudTimer);
+  cloudTimer=setTimeout(()=>saveCloudSnapshot(),500);
+}
+async function collectSnapshot(){
+  return {
+    format:"FoodLog-Cloud",
+    version:1,
+    savedAt:new Date().toISOString(),
+    entries:await all("entries"), foods:await all("foods"),
+    categories:await all("categories"), settings:await all("settings"),
+    bugReports:await all("bugReports")
+  };
+}
+async function saveCloudSnapshot(){
+  if(!firebaseUser || !firestoreDb || !firebaseApi || cloudBusy || suppressCloud) return;
+  cloudBusy=true;
+  try{
+    cloudMessage="Saving to cloud…"; refreshCloudCard();
+    const snap=await collectSnapshot();
+    const ref=firebaseApi.doc(firestoreDb,"users",firebaseUser.uid,"data","foodlog");
+    await firebaseApi.setDoc(ref,snap);
+    cloudMessage="Cloud saved: "+new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+  }catch(err){ cloudMessage="Cloud save error: "+String(err.message||err); console.error(err); }
+  finally{ cloudBusy=false; refreshCloudCard(); }
+}
+async function restoreCloudSnapshot(data){
+  suppressCloud=true; suppressShadow=true;
+  try{
+    for(const n of ["entries","foods","categories","settings","bugReports"]) await rawClearStore(n);
+    for(const x of data.entries||[]) await rawPut("entries",x);
+    for(const x of data.foods||[]) await rawPut("foods",x);
+    for(const x of data.categories||[]) await rawPut("categories",x);
+    for(const x of data.settings||[]) await rawPut("settings",x);
+    for(const x of data.bugReports||[]) await rawPut("bugReports",x);
+  }finally{ suppressShadow=false; suppressCloud=false; }
+  await saveShadowSnapshot();
+  await refreshCategorySelects();
+  historySummaryMode=await getSetting("historySummary","quantity");
+}
+async function connectCloudForUser(user){
+  firebaseUser=user; cloudMessage="Checking cloud data…"; refreshCloudCard();
+  try{
+    const ref=firebaseApi.doc(firestoreDb,"users",user.uid,"data","foodlog");
+    const remote=await firebaseApi.getDoc(ref);
+    if(remote.exists()){
+      await restoreCloudSnapshot(remote.data());
+      cloudMessage="Cloud data loaded";
+    }else{
+      await saveCloudSnapshot();
+      cloudMessage="Cloud backup created";
+    }
+    await render();
+  }catch(err){ cloudMessage="Cloud connection error: "+String(err.message||err); console.error(err); refreshCloudCard(); }
+}
+function refreshCloudCard(){
+  const box=document.getElementById("cloudStatus"); if(!box) return;
+  if(!firebaseApi){
+    box.innerHTML=`${esc(cloudMessage||"Connecting to cloud…")}`;
+    return;
+  }
+  if(!firebaseUser){
+    if(cloudMessage==="Connecting to cloud…" || cloudMessage==="Checking cloud data…"){
+      box.innerHTML=`${esc(cloudMessage)}`;
+      return;
+    }
+    box.innerHTML='Not signed in<br><button id="cloudSignIn" style="margin-top:10px">Sign in with Google</button>';
+    document.getElementById("cloudSignIn").onclick=cloudSignIn;
+    return;
+  }
+  box.innerHTML=`Signed in as: <strong>${esc(firebaseUser.email||firebaseUser.displayName||"Google user")}</strong><br>${esc(cloudMessage)}<div class="toolbar2" style="margin-top:10px"><button id="cloudSaveNow" class="secondary">Save Now</button><button id="cloudSignOut" class="secondary">Sign Out</button></div>`;
+  document.getElementById("cloudSaveNow").onclick=saveCloudSnapshot;
+  document.getElementById("cloudSignOut").onclick=()=>firebaseApi.signOut(firebaseAuth);
+}
+async function cloudSignIn(){
+  if(!firebaseApi) return;
+  try{
+    const provider=new firebaseApi.GoogleAuthProvider();
+    provider.setCustomParameters({prompt:"select_account"});
+    await firebaseApi.signInWithPopup(firebaseAuth,provider);
+  }catch(err){
+    console.error(err); cloudMessage="Sign-in error: "+String(err.message||err); refreshCloudCard();
+  }
+}
+async function initFirebase(){
+  try{
+    cloudMessage="Connecting to cloud…";
+    refreshCloudCard();
+
+    const [appMod,authMod,fsMod]=await Promise.all([
+      import("https://www.gstatic.com/firebasejs/12.18.0/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js")
+    ]);
+
+    firebaseApi={...appMod,...authMod,...fsMod};
+    const fapp=appMod.initializeApp(FIREBASE_CONFIG);
+    firebaseAuth=authMod.getAuth(fapp);
+    firestoreDb=fsMod.getFirestore(fapp);
+
+    // Ask Firebase Auth to keep the Google session across app closes/updates
+    // whenever iOS preserves this site's authentication storage.
+    try{
+      await authMod.setPersistence(firebaseAuth,authMod.browserLocalPersistence);
+    }catch(e){
+      console.warn("Firebase auth persistence could not be set",e);
+    }
+
+    authMod.onAuthStateChanged(firebaseAuth,async user=>{
+      if(user){
+        await connectCloudForUser(user);
+      }else{
+        firebaseUser=null;
+        cloudMessage="Not signed in";
+        refreshCloudCard();
+      }
+    });
+
+    refreshCloudCard();
+  }catch(err){
+    cloudMessage="Firebase load error: "+String(err.message||err);
+    console.error(err);
+    refreshCloudCard();
+  }
+}
+
+async function renderSettings(){
+  const showRecent=await getSetting("showRecent",true);
+  const showFrequent=await getSetting("showFrequent",true);
+  const defaultSummary=await getSetting("historySummary","quantity");
+  const cats=await categoryNames();
+
+  app.innerHTML=`<section class="card">
+    <h2 style="margin-top:0">Display</h2>
+    <div class="row"><div><b>Show Recent Foods</b><div class="muted">Show recent choices on Today</div></div>
+      <input id="setRecent" type="checkbox" ${showRecent?"checked":""} style="width:auto"></div>
+    <div class="row"><div><b>Show Frequent Foods</b><div class="muted">Show frequently logged foods on Today</div></div>
+      <input id="setFrequent" type="checkbox" ${showFrequent?"checked":""} style="width:auto"></div>
+    <label>History default summary</label>
+    <select id="setHistorySummary"><option value="quantity" ${defaultSummary==="quantity"?"selected":""}>Quantity</option><option value="frequency" ${defaultSummary==="frequency"?"selected":""}>Frequency</option></select>
+  </section>
+
+  <section class="card">
+    <div class="section-title"><div><h2 style="margin:0">Categories</h2><div class="muted">Used when saving and logging foods</div></div>
+      <button id="addCategory">+</button></div>
+    <div id="categoryRows" style="margin-top:10px">
+      ${cats.map(c=>`<div class="row"><b>${esc(c)}</b><button class="danger smallbtn deleteCategory" data-cat="${esc(c)}">Delete</button></div>`).join("")}
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Cloud Sync</h2>
+    <div id="cloudStatus" class="muted">Loading Firebase…</div>
+    <div class="notice">Your Food Log data is stored in Firebase under your signed-in Google account. Local storage is used as an offline copy.</div>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Export & Backup</h2>
+    <div class="toolbar2">
+      <button id="exportCSV">Export CSV</button>
+      <button id="fullBackup" class="secondary">Full Backup</button>
+      <button id="restoreBackup" class="secondary">Restore Backup</button>
+    </div>
+    <input id="restoreFile" type="file" accept=".json,application/json" style="display:none">
+    <div class="notice">Full Backup includes meal history, saved foods, categories, settings, and bug reports.</div>
+  </section>
+  <section class="card">
+    <h2 style="margin-top:0">Data Status</h2>
+    <div id="dataStatus" class="muted">Checking storage…</div>
+    <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
+  </section>
+  <section class="card"><div class="muted">Food Log PWA Version 3 Firebase Auto Reconnect</div></section>`;
+
+  refreshDataStatus.onclick=()=>updateDataStatus();
+  updateDataStatus();
+  refreshCloudCard();
+  setRecent.onchange=()=>setSetting("showRecent",setRecent.checked);
+  setFrequent.onchange=()=>setSetting("showFrequent",setFrequent.checked);
+  setHistorySummary.onchange=async()=>{
+    await setSetting("historySummary",setHistorySummary.value);
+    historySummaryMode=setHistorySummary.value;
+  };
+
+  addCategory.onclick=async()=>{
+    const name=prompt("New category name:");
+    if(!name || !name.trim()) return;
+    const clean=name.trim();
+    const existing=await categoryNames();
+    if(existing.some(c=>c.toLowerCase()===clean.toLowerCase())){ alert("That category already exists."); return; }
+    await put("categories",{name:clean});
+    await refreshCategorySelects();
+    renderSettings();
+  };
+
+  document.querySelectorAll(".deleteCategory").forEach(b=>b.onclick=async()=>{
+    const name=b.dataset.cat;
+    const foods=await all("foods");
+    const entries=await all("entries");
+    const used=foods.some(f=>f.category===name)||entries.some(e=>e.category===name);
+    if(used && !confirm(`"${name}" is used by saved foods or meal history. Delete it from the category choices anyway?\n\nExisting foods and history will keep their current category text.`)) return;
+    if(!used && !confirm(`Delete category "${name}"?`)) return;
+    await del("categories",name);
+    await refreshCategorySelects();
+    renderSettings();
+  });
+
+  exportCSV.onclick=exportCSVFile;
+  fullBackup.onclick=downloadFullBackup;
+  restoreBackup.onclick=()=>restoreFile.click();
+  restoreFile.onchange=restoreFullBackup;
+}
+
+function csvCell(v){
+  const s=String(v??"");
+  return `"${s.replace(/"/g,'""')}"`;
+}
+async function exportCSVFile(){
+  const entries=(await all("entries")).sort((a,b)=>a.date.localeCompare(b.date)||(a.createdAt||"").localeCompare(b.createdAt||""));
+  const rows=[["Date","Meal","Food","Quantity","Unit","Category"]];
+  entries.forEach(e=>rows.push([e.date,e.meal,e.foodName,e.quantity,e.unit,e.category]));
+  const csv=rows.map(r=>r.map(csvCell).join(",")).join("\r\n");
+  downloadBlob(csv,`FoodLog-${localDay()}-Export.csv`,"text/csv;charset=utf-8");
+}
+
+async function downloadFullBackup(){
+  const data={
+    format:"FoodLog-PWA-Backup",
+    version:2,
+    createdAt:new Date().toISOString(),
+    entries:await all("entries"),
+    foods:await all("foods"),
+    categories:await all("categories"),
+    settings:await all("settings"),
+    bugReports:await all("bugReports")
+  };
+  downloadBlob(JSON.stringify(data,null,2),`FoodLog-${localDay()}-FullBackup.json`,"application/json");
+}
+function downloadBlob(content,filename,type){
+  const blob=new Blob([content],{type});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function clearStore(name){
+  await rawClearStore(name);
+  scheduleShadowSnapshot();
+}
+async function restoreFullBackup(ev){
+  const file=ev.target.files?.[0];
+  if(!file) return;
+  try{
+    const data=JSON.parse(await file.text());
+    if(data.format!=="FoodLog-PWA-Backup" || !Array.isArray(data.entries) || !Array.isArray(data.foods)){
+      alert("This is not a valid Food Log PWA full backup.");
+      ev.target.value="";
+      return;
+    }
+    if(!confirm(`Restore this backup?\n\nMeals: ${data.entries.length}\nSaved foods: ${data.foods.length}\n\nThis will replace the current Food Log data on this device.`)){
+      ev.target.value=""; return;
+    }
+
+    suppressShadow=true;
+    try{
+      for(const name of ["entries","foods","categories","settings","bugReports"]) await rawClearStore(name);
+      for(const x of data.entries||[]) await rawPut("entries",x);
+      for(const x of data.foods||[]) await rawPut("foods",x);
+      for(const x of data.categories||[]) await rawPut("categories",x);
+      for(const x of data.settings||[]) await rawPut("settings",x);
+      for(const x of data.bugReports||[]) await rawPut("bugReports",x);
+    }finally{
+      suppressShadow=false;
+    }
+
+    await ensureCategories();
+    await refreshCategorySelects();
+    await saveShadowSnapshot();
+    historySummaryMode=await getSetting("historySummary","quantity");
+    alert("Backup restored successfully.");
+    await renderSettings();
+  }catch(err){
+    alert("The backup could not be restored: "+err.message);
+  }
+  ev.target.value="";
+}
+
+async function renderBugs(){
+  const reports=(await all("bugReports")).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  app.innerHTML=`<section class="card">
+    <div class="section-title">
+      <div><h2 style="margin:0">Bug Capture</h2><div class="muted">Save problems you notice while using Food Log</div></div>
+      <button id="newBug">Report Bug</button>
+    </div>
+    ${reports.length?`<div style="margin-top:12px" id="bugRows"></div>`:'<div class="empty" style="margin-top:12px">No saved bug reports</div>'}
+  </section>
+  ${reports.length?`<section class="card"><div class="toolbar2">
+    <button class="secondary" id="copyBugs">Copy All Reports</button>
+    <button class="danger" id="deleteAllBugs">Delete All</button>
+  </div></section>`:""}`;
+
+  newBug.onclick=()=>{
+    bugWhat.value="";
+    bugTrying.value="";
+    bugExpected.value="";
+    bugDialog.showModal();
+  };
+
+  if(reports.length){
+    bugRows.innerHTML=reports.map(r=>`<div class="row" style="align-items:flex-start">
+      <div style="min-width:0;flex:1">
+        <b>${esc(r.what)}</b>
+        <div class="muted">${esc(new Date(r.createdAt).toLocaleString())} · ${esc(r.screen)}</div>
+        ${r.trying?`<div style="margin-top:6px"><span class="muted">Trying to do:</span> ${esc(r.trying)}</div>`:""}
+        ${r.expected?`<div style="margin-top:4px"><span class="muted">Expected:</span> ${esc(r.expected)}</div>`:""}
+      </div>
+      <button class="danger smallbtn deleteBug" data-id="${r.id}">Delete</button>
+    </div>`).join("");
+
+    document.querySelectorAll(".deleteBug").forEach(b=>b.onclick=async()=>{
+      if(confirm("Delete this bug report?")){
+        await del("bugReports",b.dataset.id);
+        renderBugs();
+      }
+    });
+
+    copyBugs.onclick=async()=>{
+      const out=reports.map((r,i)=>[
+        `BUG ${i+1}`,
+        `Date: ${new Date(r.createdAt).toLocaleString()}`,
+        `Screen: ${r.screen}`,
+        `What happened: ${r.what}`,
+        `Trying to do: ${r.trying||""}`,
+        `Expected: ${r.expected||""}`,
+        `App version: ${r.appVersion}`,
+        `Device/browser: ${r.userAgent}`
+      ].join("\\n")).join("\\n\\n--------------------\\n\\n");
+
+      try{
+        await navigator.clipboard.writeText(out);
+        alert("Bug reports copied. You can paste them into ChatGPT or an email.");
+      }catch{
+        alert("Could not copy automatically on this device.");
+      }
+    };
+
+    deleteAllBugs.onclick=async()=>{
+      if(!confirm("Delete all saved bug reports?")) return;
+      await rawClearStore("bugReports");
+      await saveShadowSnapshot();
+      renderBugs();
+    };
+  }
+}
+
+async function renderFoods(){
+  const foods=(await all("foods")).sort((a,b)=>a.name.localeCompare(b.name));
+  app.innerHTML=`<div class="section-title" style="margin-bottom:12px">
+    <input class="search" id="foodSearch" placeholder="Search foods or categories" style="margin:0;flex:1">
+    <button id="addSavedFood" aria-label="Add food" style="font-size:24px;line-height:1;padding:8px 13px">+</button>
+  </div>
+  <section class="card"><div class="section-title"><h2>Saved Foods</h2><span class="muted">${foods.length} foods</span></div><div id="foodRows"></div></section>`;
+
+  const draw=(q="")=>{
+    q=q.toLowerCase();
+    const f=foods.filter(x=>x.name.toLowerCase().includes(q)||x.category.toLowerCase().includes(q));
+    foodRows.innerHTML=f.map(x=>`<div class="row">
+      <div><b>${esc(x.name)}</b><div class="muted">${esc(x.quantity)} ${esc(x.unit)} · ${esc(x.category)}</div></div>
+      <div class="toolbar2">
+        <button class="secondary smallbtn editSavedFood" data-food="${esc(x.name)}">Edit</button>
+        <button class="secondary smallbtn logSaved" data-food="${esc(x.name)}">Log</button>
+      </div>
+    </div>`).join("")||'<div class="empty">No matching foods</div>';
+
+    document.querySelectorAll(".logSaved").forEach(b=>b.onclick=()=>openFood({date:localDay(),foodName:b.dataset.food}));
+    document.querySelectorAll(".editSavedFood").forEach(b=>b.onclick=async()=>{
+      const current=(await all("foods")).find(x=>x.name===b.dataset.food);
+      if(current) openSavedFoodDialog(current);
+    });
+  };
+
+  draw();
+  foodSearch.oninput=e=>draw(e.target.value);
+  addSavedFood.onclick=()=>openSavedFoodDialog();
+}
+
+async function openSavedFoodDialog(food=null){
+  await refreshCategorySelects();
+  originalSavedFoodName.value=food?.name||"";
+  savedFoodTitle.textContent=food?"Edit Saved Food":"Add Saved Food";
+  savedFoodName.value=food?.name||"";
+  savedFoodQuantity.value=food?.quantity||"1";
+  savedFoodUnit.value=food?.unit||"cup";
+  savedFoodCategory.value=food?.category||"Other";
+  deleteSavedFood.style.display=food?"block":"none";
+  savedFoodDialog.showModal();
+}
+
+
+let currentFoodChoices=[];
+
+function rankedFoodMatches(query, foods, limit=3){
+  const q=String(query||"").trim().toLowerCase();
+  if(!q) return [];
+  const starts=foods.filter(f=>f.name.toLowerCase().startsWith(q))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+  const contains=foods.filter(f=>{
+    const n=f.name.toLowerCase();
+    return !n.startsWith(q) && n.includes(q);
+  }).sort((a,b)=>a.name.localeCompare(b.name));
+  return [...starts,...contains].slice(0,limit);
+}
+
+function showFoodSuggestions(query){
+  const matches=rankedFoodMatches(query,currentFoodChoices,3);
+  if(!query.trim()){
+    foodSuggestions.innerHTML="";
+    return;
+  }
+  foodSuggestions.innerHTML=matches.length
+    ? `<div class="muted" style="margin-bottom:5px">Suggestions</div>`+
+      matches.map(f=>`<button type="button" class="secondary smallbtn foodSuggest" data-food="${esc(f.name)}" style="margin:0 5px 5px 0">${esc(f.name)}</button>`).join("")
+    : `<div class="muted">No saved-food matches. You can still save this as a new food.</div>`;
+
+  document.querySelectorAll(".foodSuggest").forEach(b=>b.onclick=()=>selectFoodChoice(b.dataset.food));
+}
+
+async function selectFoodChoice(name){
+  const f=currentFoodChoices.find(x=>x.name===name);
+  foodName.value=name;
+  foodSuggestions.innerHTML="";
+  if(f){
+    quantity.value=f.quantity;
+    unit.value=f.unit;
+    category.value=f.category;
+  }
+}
+
+async function drawBrowseFoods(query=""){
+  const q=query.trim().toLowerCase();
+  const freshFoods=await all("foods");
+  currentFoodChoices=[...freshFoods].sort((a,b)=>a.name.localeCompare(b.name));
+  const list=currentFoodChoices
+    .filter(f=>!q || f.name.toLowerCase().includes(q) || String(f.category||"").toLowerCase().includes(q))
+    .sort((a,b)=>a.name.localeCompare(b.name));
+
+  browseFoodList.innerHTML=list.length
+    ? list.map(f=>`<button type="button" class="browseFoodChoice" data-food="${esc(f.name)}"
+        style="display:block;width:100%;text-align:left;background:transparent;color:#111;border-radius:0;border-bottom:1px solid #eee;padding:12px 4px">
+        <b>${esc(f.name)}</b><div class="muted">${esc(f.quantity)} ${esc(f.unit)} · ${esc(f.category)}</div>
+      </button>`).join("")
+    : '<div class="empty">No matching foods</div>';
+
+  document.querySelectorAll(".browseFoodChoice").forEach(b=>b.onclick=async()=>{
+    await selectFoodChoice(b.dataset.food);
+    browseFoodsDialog.close();
+  });
+}
+
+async function openFood(opts={}){
+  await refreshCategorySelects();
+  editingId.value=opts.id||"";
+  entryDate.max=localDay();
+  entryDate.value=opts.date||localDay();
+  meal.value=opts.meal||"Breakfast";
+  foodName.value=opts.foodName||"";
+  foodSuggestions.innerHTML="";
+  const foods=await all("foods");
+  currentFoodChoices=[...foods].sort((a,b)=>a.name.localeCompare(b.name));
+  let f=null;
+  if(opts.id){
+    dialogTitle.textContent="Edit Food Entry";
+    quantity.value=opts.quantity; unit.value=opts.unit; category.value=opts.category;
+  } else {
+    dialogTitle.textContent="Add Food";
+    f=foods.find(x=>x.name===opts.foodName);
+    quantity.value=f?f.quantity:"1"; unit.value=f?f.unit:"cup"; category.value=f?f.category:"Other";
+  }
+  foodDialog.showModal();
+}
+foodName.oninput=async e=>{
+  const typed=e.target.value;
+  showFoodSuggestions(typed);
+  const f=currentFoodChoices.find(x=>x.name.toLowerCase()===typed.trim().toLowerCase());
+  if(f){
+    quantity.value=f.quantity;
+    unit.value=f.unit;
+    category.value=f.category;
+  }
+};
+cancelBug.onclick=()=>bugDialog.close();
+saveBug.onclick=async e=>{
+  e.preventDefault();
+  const what=bugWhat.value.trim();
+  if(!what) return;
+
+  await put("bugReports",{
+    id:crypto.randomUUID(),
+    createdAt:new Date().toISOString(),
+    screen:tab,
+    what,
+    trying:bugTrying.value.trim(),
+    expected:bugExpected.value.trim(),
+    appVersion:"3 Firebase Cloud",
+    userAgent:navigator.userAgent
+  });
+
+  bugDialog.close();
+  if(tab==="bugs") await renderBugs();
+};
+
+cancelSavedFood.onclick=()=>savedFoodDialog.close();
+deleteSavedFood.onclick=async ()=>{
+  const original=originalSavedFoodName.value.trim();
+  if(!original) return;
+  if(!confirm('Delete "'+original+'" from your saved foods list?\n\nExisting meal history will not be deleted.')) return;
+
+  await del("foods", original);
+  savedFoodDialog.close();
+
+  if(tab==="foods") await renderFoods();
+};
+
+saveSavedFood.onclick=async e=>{
+  e.preventDefault();
+  const name=savedFoodName.value.trim();
+  if(!name) return;
+
+  const original=originalSavedFoodName.value.trim();
+  const foods=await all("foods");
+  const collision=foods.find(f=>f.name.toLowerCase()===name.toLowerCase() && f.name!==original);
+  if(collision){
+    alert("A saved food with that name already exists.");
+    return;
+  }
+
+  if(original && original!==name){
+    await del("foods",original);
+  }
+
+  await put("foods",{
+    name,
+    quantity:savedFoodQuantity.value.trim()||"1",
+    unit:savedFoodUnit.value,
+    category:savedFoodCategory.value
+  });
+
+  savedFoodDialog.close();
+  if(tab==="foods") await renderFoods();
+};
+browseFoods.onclick=async()=>{
+  browseFoodSearch.value="";
+  browseFoodList.innerHTML='<div class="empty">Loading foods…</div>';
+  browseFoodsDialog.showModal();
+  await drawBrowseFoods("");
+};
+browseFoodSearch.oninput=async e=>await drawBrowseFoods(e.target.value);
+cancelBrowseFoods.onclick=()=>browseFoodsDialog.close();
+
+cancelFood.onclick=()=>foodDialog.close();
+cancelCopy.onclick=()=>{ copyMealName=null; copyDialog.close(); };
+saveFood.onclick=async e=>{
+  const n=foodName.value.trim();
+  if(!n){e.preventDefault();return}
+  const chosenDate=entryDate.value||localDay();
+  if(chosenDate>localDay()){
+    e.preventDefault();
+    alert("Food can only be logged for today or an earlier date.");
+    return;
+  }
+  const id=editingId.value||crypto.randomUUID();
+  let createdAt=new Date().toISOString();
+  if(editingId.value){
+    const entries=await all("entries"); const old=entries.find(x=>x.id===id); if(old?.createdAt) createdAt=old.createdAt;
+  }
+  const obj={id,date:chosenDate,meal:meal.value,foodName:n,quantity:quantity.value.trim()||"1",unit:unit.value,category:category.value,createdAt};
+  await put("entries",obj);
+  const foods=await all("foods");
+  if(!foods.some(f=>f.name.toLowerCase()===n.toLowerCase())) await put("foods",{name:n,quantity:obj.quantity,unit:obj.unit,category:obj.category});
+  setTimeout(render,0);
+};
+
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+
+async function requestPersistentStorage(){
+  try{
+    if(navigator.storage && navigator.storage.persist){
+      const already=navigator.storage.persisted ? await navigator.storage.persisted() : false;
+      if(!already) await navigator.storage.persist();
+    }
+  }catch(e){ console.warn("Persistent storage request failed",e); }
+}
+async function updateDataStatus(){
+  const box=document.getElementById("dataStatus");
+  if(!box) return;
+  try{
+    const entries=(await all("entries")).length;
+    const foods=(await all("foods")).length;
+    const categories=(await all("categories")).length;
+    const bugs=(await all("bugReports")).length;
+    let persistent="Unknown", used="";
+    if(navigator.storage && navigator.storage.persisted)
+      persistent=(await navigator.storage.persisted())?"Yes":"No";
+    else persistent="Not supported";
+    if(navigator.storage && navigator.storage.estimate){
+      const est=await navigator.storage.estimate();
+      used=`<br>Storage used: <strong>${Math.round((est.usage||0)/1024).toLocaleString()} KB</strong>`;
+    }
+    const standalone=(window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||navigator.standalone===true;
+    box.innerHTML=`Running as: <strong>${standalone?"Home Screen app":"Safari/browser"}</strong><br>Meal entries: <strong>${entries}</strong><br>Saved foods: <strong>${foods}</strong><br>Categories: <strong>${categories}</strong><br>Bug reports: <strong>${bugs}</strong><br>Persistent storage granted: <strong>${persistent}</strong>${used}`;
+  }catch(err){ box.textContent="Could not read data status: "+String(err.message||err); }
+}
+
+openDB().then(async()=>{
+  await restoreShadowIfDatabaseEmpty();
+  await seedCatalogOnlyIfNeeded();
+  await ensureCategories();
+  await refreshCategorySelects();
+  historySummaryMode=await getSetting("historySummary","quantity");
+  await requestPersistentStorage();
+  await saveShadowSnapshot();
+  await render();
+  await updateDataStatus();
+  initFirebase();
+}).catch(err=>{
+  console.error(err);
+  document.getElementById("app").innerHTML='<section class="card"><h2>Food Log could not start</h2><div class="muted">'+String(err.message||err)+'</div></section>';
+});
+if("serviceWorker"in navigator) navigator.serviceWorker.register("service-worker.js");
+</script>
+</body>
+</html>
