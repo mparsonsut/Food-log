@@ -835,6 +835,29 @@ async function restoreCloudSnapshot(data){
   await refreshCategorySelects();
   historySummaryMode=await getSetting("historySummary","quantity");
 }
+
+async function initializeFreshAccount(){
+  suppressCloud=true; suppressShadow=true;
+  try{
+    for(const n of ["entries","foods","categories","settings","bugReports","recipes","medications","medChecks"]){
+      await rawClearStore(n);
+    }
+    try{ localStorage.removeItem(SHADOW_KEY); }catch{}
+    for(const f of CATALOG) await rawPut("foods",f);
+    const defaults=["Protein","Fruit / Vegetable","Carb / Starch","Dairy","Fat","Sugar / Sweets","Beverage","Other"];
+    for(const name of defaults) await rawPut("categories",{name});
+    await rawPut("settings",{key:"showRecent",value:true});
+    await rawPut("settings",{key:"showFrequent",value:true});
+    await rawPut("settings",{key:"historySummary",value:"quantity"});
+  }finally{
+    suppressShadow=false;
+    suppressCloud=false;
+  }
+  await saveShadowSnapshot();
+  await refreshCategorySelects();
+  historySummaryMode=await getSetting("historySummary","quantity");
+}
+
 async function connectCloudForUser(user){
   firebaseUser=user; cloudMessage="Checking cloud data…"; refreshCloudCard();
   try{
@@ -844,8 +867,19 @@ async function connectCloudForUser(user){
       await restoreCloudSnapshot(remote.data());
       cloudMessage="Cloud data loaded";
     }else{
+      const ok=confirm(
+        "No Food Log cloud data exists for "+(user.email||"this Google account")+
+        ".\n\nStart a new, private Food Log for this account?"
+      );
+      if(!ok){
+        cloudMessage="New account setup cancelled";
+        await firebaseApi.signOut(firebaseAuth);
+        refreshCloudCard();
+        return;
+      }
+      await initializeFreshAccount();
       await saveCloudSnapshot();
-      cloudMessage="Cloud backup created";
+      cloudMessage="New private Food Log created";
     }
     await render();
   }catch(err){ cloudMessage="Cloud connection error: "+String(err.message||err); console.error(err); refreshCloudCard(); }
@@ -952,7 +986,7 @@ async function renderSettings(){
   <section class="card">
     <h2 style="margin-top:0">Cloud Sync</h2>
     <div id="cloudStatus" class="muted">Loading Firebase…</div>
-    <div class="notice">Your Food Log data is stored in Firebase under your signed-in Google account. Local storage is used as an offline copy.</div>
+    <div class="notice">Your Food Log data is private to the signed-in Google account. Each Google account has its own cloud Food Log. Local storage is used as an offline copy on this device.</div>
   </section>
 
   <section class="card">
@@ -970,7 +1004,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.2 Recipe Search + Consistent Category Servings</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.2.1 Shareable Accounts</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
