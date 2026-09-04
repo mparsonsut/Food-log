@@ -413,26 +413,43 @@ function waterTotal(entries){
 
 
 async function categoryServingTotals(entries){
-  const foods=await all("foods"), map=new Map(foods.map(f=>[f.name.toLowerCase(),f])), totals={};
+  const foods=await all("foods");
+  const foodMap=new Map(foods.map(f=>[String(f.name).toLowerCase(),f]));
+  const totals={};
+
+  const addServing=(name,quantity,unit,category,stdQty,stdUnit)=>{
+    let food=foodMap.get(String(name).toLowerCase());
+    // Recipe ingredient snapshots are authoritative for old history even if the saved food changes later.
+    if(stdQty && stdUnit){
+      food={name,category,standardQuantity:stdQty,standardUnit:stdUnit,quantity:stdQty,unit:stdUnit};
+    }
+    if(!food) return;
+    const sv=servingsFromQuantity(String(quantity),String(unit),food);
+    if(sv==null || !Number.isFinite(sv)) return;
+    const cat=category || food.category || "Other";
+    totals[cat]=(totals[cat]||0)+sv;
+  };
+
   for(const e of entries.filter(x=>canonicalMeal(x.meal)!=="Water")){
-    if(e.recipeIngredients){
-      const parentBase=qtyNumber(e.recipeServingQuantity||e.standardQuantity||"1");
-      const parentQty=qtyNumber(e.quantity||"1");
-      const mult=(parentBase&&e.unit===(e.recipeServingUnit||e.standardUnit))?parentQty/parentBase:1;
+    if(Array.isArray(e.recipeIngredients) && e.recipeIngredients.length){
+      const base=qtyNumber(e.recipeServingQuantity||e.standardQuantity||"1");
+      const eaten=qtyNumber(e.quantity||"1");
+      // Recipe quantity is expressed in the recipe's own standard unit.
+      if(!base || String(e.unit)!==String(e.recipeServingUnit||e.standardUnit)) continue;
+      const multiplier=eaten/base;
       for(const i of e.recipeIngredients){
-        const f=map.get(i.name.toLowerCase())||i;
-        const sv=servingsFromQuantity(fmt(qtyNumber(i.quantity)*mult),i.unit,f);
-        if(sv!=null) totals[i.category||f.category||"Other"]=(totals[i.category||f.category||"Other"]||0)+sv;
+        addServing(i.name,qtyNumber(i.quantity)*multiplier,i.unit,i.category,i.standardQuantity,i.standardUnit);
       }
     }else{
-      const sv=servingsForEntry(e,map);
-      if(sv!=null) totals[e.category||"Other"]=(totals[e.category||"Other"]||0)+sv;
+      const stdQty=e.standardQuantity||null, stdUnit=e.standardUnit||null;
+      addServing(e.foodName,e.quantity,e.unit,e.category,stdQty,stdUnit);
     }
   }
   return totals;
 }
 async function categoryServingCard(entries,title){
-  const t=await categoryServingTotals(entries), rows=Object.keys(t).sort().map(c=>`<tr><td>${esc(c)}</td><td>${fmt(t[c])}</td></tr>`).join("");
+  const t=await categoryServingTotals(entries);
+  const rows=Object.keys(t).sort().map(c=>`<tr><td>${esc(c)}</td><td>${fmt(t[c])}</td></tr>`).join("");
   return `<section class="card"><h2 style="margin-top:0">${esc(title)}</h2>${rows?`<table class="summary-table"><tr><th>Category</th><th>Servings</th></tr>${rows}</table>`:'<div class="empty">No convertible servings logged</div>'}</section>`;
 }
 function scheduleText(m){
@@ -477,11 +494,11 @@ async function renderToday(){
   const main=["Breakfast","Lunch","Dinner"].filter(m=>foodEntries.some(e=>canonicalMeal(e.meal)===m)).length;
   const snackSlots=MEALS.filter(m=>m.startsWith("Snack") && foodEntries.some(e=>canonicalMeal(e.meal)===m)).length;
   const waterOz=waterTotal(entries);
-  const counts={}; foodEntries.forEach(e=>counts[e.category]=(counts[e.category]||0)+1);
+  const categoryServings=await categoryServingTotals(foodEntries);
 
   let h=`<section class="card"><div class="section-title"><h2>Today Summary</h2><button id="topAdd">Add Food</button></div>
     <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${snackSlots}/4</b>Snack Times</div><div class="metric"><b>${fmt(waterOz)}</b>Water oz</div></div>
-    <div class="chips">${Object.keys(counts).sort().map(c=>`<span class="chip">${esc(c)}: ${counts[c]}</span>`).join("")}</div></section>`;
+    <div class="chips">${Object.keys(categoryServings).sort().map(c=>`<span class="chip">${esc(c)}: ${fmt(categoryServings[c])}</span>`).join("")}</div></section>`;
 
   const showRecent=await getSetting("showRecent",true);
   const showFrequent=await getSetting("showFrequent",true);
@@ -535,7 +552,6 @@ async function renderToday(){
     ${waterEntries.length?waterEntries.map(e=>waterRow(e,true)).join(""):'<div class="empty">No water logged</div>'}</section>`;
 
   h+=await medCard(localDay());
-  h+=await categoryServingCard(entries,"Today Category Servings");
   app.innerHTML=h;
   topAdd.onclick=()=>openFood({date:localDay()});
   addWater.onclick=()=>openWater({date:localDay()});
@@ -932,7 +948,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5 Recipes + Category Servings + Medicines</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.1 Recipe Search + Category Math Fix</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1451,12 +1467,88 @@ saveFood.onclick=async e=>{
 document.querySelectorAll(".tabs button").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
 
 
-function riHTML(item={},foods=[]){return `<div class="card ri" style="padding:10px"><label>Ingredient</label><select class="riName">${foods.map(f=>`<option value="${esc(f.name)}" ${f.name===item.name?"selected":""}>${esc(f.name)}</option>`).join("")}</select><div class="copygrid"><div><label>Quantity</label><input class="riQty" value="${esc(item.quantity||"1")}"></div><div><label>Unit</label><select class="riUnit">${["cup","tbsp","tsp","oz","lb","gram","slice","piece","serving","bowl","glass","small","medium","large"].map(u=>`<option ${u===item.unit?"selected":""}>${u}</option>`).join("")}</select></div></div><button type="button" class="danger smallbtn removeRI">Remove</button></div>`}
-async function addRI(item={}){const foods=(await all("foods")).filter(f=>!f.isRecipe).sort((a,b)=>a.name.localeCompare(b.name));recipeIngredients.insertAdjacentHTML("beforeend",riHTML(item,foods));document.querySelectorAll(".removeRI").forEach(b=>b.onclick=()=>b.closest(".ri").remove())}
-async function openRecipe(r=null){recipeOldName.value=r?.name||"";recipeName.value=r?.name||"";recipeQty.value=r?.servingQuantity||"1";recipeUnit.value=r?.servingUnit||"piece";recipeIngredients.innerHTML="";for(const i of (r?.ingredients?.length?r.ingredients:[{}]))await addRI(i);recipeDelete.style.display=r?"block":"none";recipeDialog.showModal()}
+function riHTML(item={}){
+  return `<div class="card ri" style="padding:10px">
+    <label>Ingredient</label>
+    <div class="searchwrap">
+      <input class="riSearch" autocomplete="off" placeholder="Type to search foods…" value="${esc(item.name||"")}">
+      <div class="suggestions riSuggestions"></div>
+    </div>
+    <div class="muted riStandard" style="margin:6px 0"></div>
+    <div class="copygrid">
+      <div><label>Quantity</label><input class="riQty" value="${esc(item.quantity||"1")}"></div>
+      <div><label>Unit</label><select class="riUnit">${["cup","tbsp","tsp","oz","lb","gram","slice","piece","serving","bowl","glass","small","medium","large"].map(u=>`<option ${u===item.unit?"selected":""}>${u}</option>`).join("")}</select></div>
+    </div>
+    <button type="button" class="danger smallbtn removeRI">Remove Ingredient</button>
+  </div>`;
+}
+async function setupRecipeIngredientRow(row,item={}){
+  const foods=(await all("foods")).filter(f=>!f.isRecipe).sort((a,b)=>a.name.localeCompare(b.name));
+  const input=row.querySelector(".riSearch"), box=row.querySelector(".riSuggestions");
+  const qty=row.querySelector(".riQty"), unit=row.querySelector(".riUnit"), std=row.querySelector(".riStandard");
+
+  const showStandard=(f)=>{
+    if(!f){std.textContent="Select a saved food to see its standard serving.";return}
+    const sv=standardServing(f);
+    std.textContent=sv?`Standard serving: ${sv.quantity} ${sv.unit} · ${f.category}`:`Category: ${f.category}`;
+  };
+  const choose=(f,keepEntered=false)=>{
+    input.value=f.name; input.dataset.selectedName=f.name;
+    const sv=standardServing(f);
+    if(sv && !keepEntered){qty.value=sv.quantity;unit.value=sv.unit}
+    showStandard(f); box.innerHTML=""; box.style.display="none";
+  };
+  const draw=()=>{
+    const q=input.value.trim().toLowerCase();
+    if(!q){box.innerHTML="";box.style.display="none";return}
+    const matches=foods.filter(f=>f.name.toLowerCase().startsWith(q))
+      .concat(foods.filter(f=>!f.name.toLowerCase().startsWith(q)&&f.name.toLowerCase().includes(q)))
+      .slice(0,6);
+    box.innerHTML=matches.map(f=>`<button type="button" class="riSuggestion" data-name="${esc(f.name)}"><b>${esc(f.name)}</b><br><span class="muted">${esc(f.category)} · ${standardServing(f)?`Std ${esc(standardServing(f).quantity)} ${esc(standardServing(f).unit)}`:"No standard serving"}</span></button>`).join("");
+    box.style.display=matches.length?"block":"none";
+    box.querySelectorAll(".riSuggestion").forEach(b=>b.onclick=()=>choose(foods.find(f=>f.name===b.dataset.name)));
+  };
+  input.oninput=()=>{input.dataset.selectedName="";showStandard(null);draw()};
+  input.onfocus=draw;
+  if(item.name){
+    const f=foods.find(x=>x.name.toLowerCase()===String(item.name).toLowerCase());
+    if(f) choose(f,true); else showStandard(null);
+  } else showStandard(null);
+}
+async function addRI(item={}){
+  recipeIngredients.insertAdjacentHTML("beforeend",riHTML(item));
+  const row=recipeIngredients.lastElementChild;
+  await setupRecipeIngredientRow(row,item);
+  document.querySelectorAll(".removeRI").forEach(b=>b.onclick=()=>b.closest(".ri").remove());
+}
+async function openRecipe(r=null){
+  recipeOldName.value=r?.name||"";recipeName.value=r?.name||"";recipeQty.value=r?.servingQuantity||"1";recipeUnit.value=r?.servingUnit||"piece";
+  recipeIngredients.innerHTML="";
+  for(const i of (r?.ingredients?.length?r.ingredients:[{}]))await addRI(i);
+  recipeDelete.style.display=r?"block":"none";recipeDialog.showModal();
+}
 recipeAddIngredient.onclick=()=>addRI(); recipeCancel.onclick=()=>recipeDialog.close();
 recipeDelete.onclick=async()=>{if(recipeOldName.value&&confirm("Delete this recipe? Existing history remains.")){await del("recipes",recipeOldName.value);const f=(await all("foods")).find(x=>x.name===recipeOldName.value&&x.isRecipe);if(f)await del("foods",f.name);recipeDialog.close();renderSettings()}};
-recipeSave.onclick=async e=>{e.preventDefault();const name=recipeName.value.trim();if(!name)return;const foods=await all("foods"), ingredients=[];for(const row of document.querySelectorAll(".ri")){const fn=row.querySelector(".riName").value,f=foods.find(x=>x.name===fn),q=row.querySelector(".riQty").value||"1",u=row.querySelector(".riUnit").value,std=standardServing(f);if(!f||!std||servingsFromQuantity(q,u,f)==null){alert("Each recipe ingredient must use a quantity/unit compatible with its saved standard serving.");return}ingredients.push({name:fn,quantity:q,unit:u,category:f.category,standardQuantity:std.quantity,standardUnit:std.unit})}if(!ingredients.length)return;const old=recipeOldName.value;if(old&&old!==name){await del("recipes",old);const of=foods.find(x=>x.name===old&&x.isRecipe);if(of)await del("foods",old)}await put("recipes",{name,servingQuantity:recipeQty.value||"1",servingUnit:recipeUnit.value,ingredients});await put("foods",{name,quantity:recipeQty.value||"1",unit:recipeUnit.value,standardQuantity:recipeQty.value||"1",standardUnit:recipeUnit.value,category:"Other",isRecipe:true});recipeDialog.close();renderSettings()};
+recipeSave.onclick=async e=>{
+  e.preventDefault();
+  const name=recipeName.value.trim(); if(!name)return;
+  const foods=await all("foods"), ingredients=[];
+  for(const row of document.querySelectorAll(".ri")){
+    const typed=row.querySelector(".riSearch").value.trim();
+    const f=foods.find(x=>x.name.toLowerCase()===typed.toLowerCase()&&!x.isRecipe);
+    const q=row.querySelector(".riQty").value||"1",u=row.querySelector(".riUnit").value;
+    if(!f){alert(`"${typed}" is not a saved food. Choose it from the search results first.`);return}
+    const std=standardServing(f);
+    if(!std||servingsFromQuantity(q,u,f)==null){alert(`${f.name}: the quantity/unit must be compatible with its standard serving (${std?.quantity||"?"} ${std?.unit||"?"}).`);return}
+    ingredients.push({name:f.name,quantity:q,unit:u,category:f.category,standardQuantity:std.quantity,standardUnit:std.unit});
+  }
+  if(!ingredients.length)return;
+  const old=recipeOldName.value;
+  if(old&&old!==name){await del("recipes",old);const of=foods.find(x=>x.name===old&&x.isRecipe);if(of)await del("foods",old)}
+  await put("recipes",{name,servingQuantity:recipeQty.value||"1",servingUnit:recipeUnit.value,ingredients});
+  await put("foods",{name,quantity:recipeQty.value||"1",unit:recipeUnit.value,standardQuantity:recipeQty.value||"1",standardUnit:recipeUnit.value,category:"Other",isRecipe:true});
+  recipeDialog.close();renderSettings();
+};
 
 function medFields(){weekdayBox.style.display=medFrequency.value==="weekdays"?"block":"none";everyNBox.style.display=medFrequency.value==="everyN"?"block":"none"} medFrequency.onchange=medFields;
 function openMed(group,m=null){medId.value=m?.id||"";medGroup.value=group;medTitle.textContent=(m?"Edit ":"Add ")+group;medName.value=m?.name||"";medDose.value=m?.dose||"";medFrequency.value=m?.frequency||"daily";document.querySelectorAll(".wd").forEach(x=>x.checked=(m?.days||[]).map(Number).includes(Number(x.value)));medEveryN.value=m?.everyN||2;medStart.value=m?.startDate||localDay();medDelete.style.display=m?"block":"none";medFields();medDialog.showModal()}
