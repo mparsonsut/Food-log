@@ -438,6 +438,19 @@ async function proteinTotal(entries){
   const foods=await all("foods"), map=new Map(foods.map(f=>[f.name.toLowerCase(),f]));
   let total=0; for(const e of entries) total+=await proteinForEntry(e,map); return total;
 }
+async function proteinThresholds(){
+  let yellow=Number(await getSetting("proteinYellowThreshold",120));
+  let green=Number(await getSetting("proteinGreenThreshold",160));
+  if(!Number.isFinite(yellow)||yellow<0) yellow=120;
+  if(!Number.isFinite(green)||green<=yellow) green=160;
+  return {yellow,green};
+}
+async function proteinMetricStyle(grams){
+  const {yellow,green}=await proteinThresholds();
+  if(grams>=green) return "background:#d9f2df;border:1px solid #9bd2a8";
+  if(grams>=yellow) return "background:#fff3bf;border:1px solid #ead36b";
+  return "background:#e5e5e8;border:1px solid #c8c8cc";
+}
 function closestServingChoice(value){
   const values=[0.25,1/3,0.5,0.75,1,1.25,1.5,2,2.5,3,4];
   const found=values.find(v=>Math.abs(v-value)<0.015);
@@ -557,9 +570,10 @@ async function renderToday(){
   const waterOz=waterTotal(entries);
   const categoryServings=await categoryServingTotals(foodEntries);
   const proteinGrams=await proteinTotal(foodEntries);
+  const proteinStyle=await proteinMetricStyle(proteinGrams);
 
   let h=`<section class="card"><div class="section-title"><h2>Today Summary</h2><button id="topAdd">Add Food</button></div>
-    <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${snackSlots}/4</b>Snack Times</div><div class="metric"><b>${fmt(proteinGrams)}g</b>Protein</div><div class="metric"><b>${fmt(waterOz)}</b>Water oz</div></div>
+    <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${snackSlots}/4</b>Snack Times</div><div class="metric" style="${proteinStyle}"><b>${fmt(proteinGrams)}g</b>Protein</div><div class="metric"><b>${fmt(waterOz)}</b>Water oz</div></div>
     <div class="chips">${Object.keys(categoryServings).sort().map(c=>`<span class="chip">${esc(c)}: ${fmt(categoryServings[c])}</span>`).join("")}</div></section>`;
 
   const showRecent=await getSetting("showRecent",true);
@@ -1151,6 +1165,7 @@ async function renderSettings(){
   const showRecent=await getSetting("showRecent",true);
   const showFrequent=await getSetting("showFrequent",true);
   const defaultSummary=await getSetting("historySummary","quantity");
+  const {yellow:proteinYellowThreshold,green:proteinGreenThreshold}=await proteinThresholds();
   const cats=await categoryNames();
 
   app.innerHTML=`<section class="card">
@@ -1161,6 +1176,16 @@ async function renderSettings(){
       <input id="setFrequent" type="checkbox" ${showFrequent?"checked":""} style="width:auto"></div>
     <label>History default summary</label>
     <select id="setHistorySummary"><option value="quantity" ${defaultSummary==="quantity"?"selected":""}>Quantity</option><option value="servings" ${defaultSummary==="servings"?"selected":""}>Food Servings</option><option value="categoryServings" ${defaultSummary==="categoryServings"?"selected":""}>Category Servings</option><option value="frequency" ${defaultSummary==="frequency"?"selected":""}>Frequency</option></select>
+  </section>
+
+  <section class="card">
+    <h2 style="margin-top:0">Protein Targets</h2>
+    <div class="muted">Set the daily protein levels used for the color indicator. Values below Yellow are gray.</div>
+    <label>Yellow starts at (grams)</label>
+    <input id="setProteinYellow" type="number" min="0" step="1" inputmode="numeric" value="${proteinYellowThreshold}">
+    <label>Green starts at (grams)</label>
+    <input id="setProteinGreen" type="number" min="1" step="1" inputmode="numeric" value="${proteinGreenThreshold}">
+    <div class="notice">Current ranges: Gray &lt; ${proteinYellowThreshold}g · Yellow ${proteinYellowThreshold}–${proteinGreenThreshold-1}g · Green ≥ ${proteinGreenThreshold}g</div>
   </section>
 
   <section class="card">
@@ -1196,13 +1221,23 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Table Audit Repair</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Thresholds</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
   refreshCloudCard();
   setRecent.onchange=()=>setSetting("showRecent",setRecent.checked);
   setFrequent.onchange=()=>setSetting("showFrequent",setFrequent.checked);
+  const saveProteinThresholds=async()=>{
+    const yellow=Math.max(0,Math.round(Number(setProteinYellow.value)||0));
+    const green=Math.max(1,Math.round(Number(setProteinGreen.value)||0));
+    if(green<=yellow){ alert("Green must start above the Yellow threshold."); return; }
+    await setSetting("proteinYellowThreshold",yellow);
+    await setSetting("proteinGreenThreshold",green);
+    renderSettings();
+  };
+  setProteinYellow.onchange=saveProteinThresholds;
+  setProteinGreen.onchange=saveProteinThresholds;
   setHistorySummary.onchange=async()=>{
     await setSetting("historySummary",setHistorySummary.value);
     historySummaryMode=setHistorySummary.value;
@@ -1619,7 +1654,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Protein Table Audit Repair",
+    appVersion:"5.3 Protein Thresholds",
     userAgent:navigator.userAgent
   });
 
