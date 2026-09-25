@@ -916,10 +916,10 @@ async function refreshCategorySelects(){
 async function migrateProteinTableAudit(){
   // V5.3 audit: align catalog foods to the approved 10g-protein portion table.
   // This intentionally updates catalog-matched saved foods from the prior protein build.
-  const done=await rawGet("settings","proteinTableAuditV53");
-  if(done?.value) return;
+  const done=await getSetting("proteinTableAuditV53",false);
+  if(done) return;
   const catalogMap=new Map(CATALOG.map(f=>[String(f.name||"").toLowerCase(),Number(f.proteinGrams)||0]));
-  const foods=await rawGetAll("foods");
+  const foods=await all("foods");
   for(const f of foods){
     const key=String(f.name||"").toLowerCase();
     if(catalogMap.has(key) && !f.isRecipe){
@@ -1196,7 +1196,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Table Audit</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Table Audit Repair</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1619,7 +1619,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Protein Table Audit",
+    appVersion:"5.3 Protein Table Audit Repair",
     userAgent:navigator.userAgent
   });
 
