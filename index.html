@@ -24,6 +24,7 @@ main{padding:14px;max-width:760px;margin:0 auto 92px}
 .row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 0;border-top:1px solid #eee}
 .row:first-child{border-top:0}
 .muted{color:#666;font-size:13px}
+.protein-inline{font-weight:700;color:#333;white-space:nowrap}
 .empty{color:#777;font-style:italic;padding:8px 0}
 button{font:inherit;border:0;border-radius:10px;padding:9px 12px;background:#0a84ff;color:#fff}
 .secondary{background:#e9e9ed;color:#111}
@@ -637,7 +638,8 @@ async function renderToday(){
   bindMedChecks();
 }
 function entryRow(e,showEdit){
-  return `<div class="row"><div><b>${esc(e.foodName)}</b><div class="muted">${esc(e.quantity)} ${esc(e.unit)} · ${esc(e.category)}${Number(e.proteinGrams)>0?` · ${fmt(Number(e.proteinGrams))}g protein`:""}</div></div>
+  const protein=Number(e.proteinGrams)||0;
+  return `<div class="row"><div><b>${esc(e.foodName)}</b><div class="muted">${esc(e.quantity)} ${esc(e.unit)} · ${esc(e.category)}${protein>0?` · <span class="protein-inline">${fmt(protein)}g protein</span>`:""}</div></div>
   <div class="toolbar2">${showEdit?`<button class="secondary smallbtn editEntry" data-id="${e.id}">Edit</button>`:""}<button class="danger smallbtn deleteEntry" data-id="${e.id}">Delete</button></div></div>`;
 }
 function waterRow(e,showEdit){
@@ -1221,7 +1223,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Thresholds</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Entry Display</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1654,7 +1656,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Protein Thresholds",
+    appVersion:"5.3 Protein Entry Display",
     userAgent:navigator.userAgent
   });
 
