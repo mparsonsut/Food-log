@@ -580,7 +580,10 @@ async function renderToday(){
   const showRecent=await getSetting("showRecent",true);
   const showFrequent=await getSetting("showFrequent",true);
 
-  const ordered=[...allEntries].filter(e=>canonicalMeal(e.meal)!=="Water").sort((a,b)=>{
+  // Recent Foods = unique foods logged on the two previous calendar days (not today).
+  const todayDate=parseDay(localDay());
+  const recentDates=new Set([localDay(addDays(todayDate,-1)),localDay(addDays(todayDate,-2))]);
+  const ordered=[...allEntries].filter(e=>canonicalMeal(e.meal)!=="Water" && recentDates.has(e.date)).sort((a,b)=>{
     const byDate=String(b.date||"").localeCompare(String(a.date||""));
     if(byDate!==0) return byDate;
     return String(b.createdAt||"").localeCompare(String(a.createdAt||""));
@@ -592,7 +595,6 @@ async function renderToday(){
     const key=String(e.foodName||"").trim().toLowerCase();
     if(key && !seen.has(key)){
       seen.add(key); recent.push(e);
-      if(recent.length===5) break;
     }
   }
 
@@ -605,7 +607,7 @@ async function renderToday(){
     if(!freq[key]) freq[key]={name,count:0};
     freq[key].count++;
   }
-  const frequent=Object.values(freq).sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name)).slice(0,5);
+  const frequent=Object.values(freq).sort((a,b)=>b.count-a.count || a.name.localeCompare(b.name)).slice(0,15);
 
   if(showRecent){
     h+=`<section class="card"><h2 style="margin-top:0;font-size:20px">Recent Foods</h2>
@@ -1223,7 +1225,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Protein Entry Display</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Food Selection Update</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1479,9 +1481,9 @@ async function openSavedFoodDialog(food=null){
 
 let currentFoodChoices=[];
 
-function rankedFoodMatches(query, foods, limit=3){
+function rankedFoodMatches(query, foods, limit=15){
   const q=String(query||"").trim().toLowerCase();
-  if(!q) return [];
+  if(!q) return [...foods].sort((a,b)=>a.name.localeCompare(b.name)).slice(0,limit);
   const starts=foods.filter(f=>f.name.toLowerCase().startsWith(q))
     .sort((a,b)=>a.name.localeCompare(b.name));
   const contains=foods.filter(f=>{
@@ -1492,11 +1494,7 @@ function rankedFoodMatches(query, foods, limit=3){
 }
 
 function showFoodSuggestions(query){
-  const matches=rankedFoodMatches(query,currentFoodChoices,3);
-  if(!query.trim()){
-    foodSuggestions.innerHTML="";
-    return;
-  }
+  const matches=rankedFoodMatches(query,currentFoodChoices,15);
   foodSuggestions.innerHTML=matches.length
     ? `<div class="muted" style="margin-bottom:5px">Suggestions</div>`+
       matches.map(f=>`<button type="button" class="secondary smallbtn foodSuggest" data-food="${esc(f.name)}" style="margin:0 5px 5px 0">${esc(f.name)}</button>`).join("")
@@ -1656,7 +1654,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Protein Entry Display",
+    appVersion:"5.3 Food Selection Update",
     userAgent:navigator.userAgent
   });
 
@@ -1808,14 +1806,24 @@ async function setupRecipeIngredientRow(row,item={}){
   const drawSuggestions=()=>{
     const q=input.value.trim().toLowerCase();
     if(!q){
-      box.innerHTML="";
-      box.style.display="none";
+      const matches=[...foods].sort((a,b)=>a.name.localeCompare(b.name)).slice(0,15);
+      box.innerHTML=matches.map(f=>{
+        const sv=standardServing(f);
+        return `<button type="button" class="riSuggestion" data-name="${esc(f.name)}">
+          <b>${esc(f.name)}</b><br>
+          <span class="muted">${esc(f.category)}${sv?` · Standard ${esc(sv.quantity)} ${esc(sv.unit)}`:""}</span>
+        </button>`;
+      }).join("");
+      box.style.display=matches.length?"block":"none";
+      box.querySelectorAll(".riSuggestion").forEach(b=>{
+        b.onclick=()=>choose(foods.find(f=>f.name===b.dataset.name));
+      });
       return;
     }
 
     const starts=foods.filter(f=>f.name.toLowerCase().startsWith(q));
     const contains=foods.filter(f=>!f.name.toLowerCase().startsWith(q) && f.name.toLowerCase().includes(q));
-    const matches=[...starts,...contains].slice(0,6);
+    const matches=[...starts,...contains].slice(0,15);
 
     box.innerHTML=matches.map(f=>{
       const sv=standardServing(f);
