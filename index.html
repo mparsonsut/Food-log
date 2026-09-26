@@ -57,6 +57,8 @@ form{padding:18px}
 .summary-table th{color:#555}
 .toolbar2{display:flex;gap:8px;flex-wrap:wrap}
 .notice{padding:10px;border-radius:10px;background:#f2f2f5;color:#444;font-size:13px;margin-top:10px}
+.report-scroll{overflow-x:auto}.report-table{width:100%;border-collapse:collapse;min-width:680px}.report-table th,.report-table td{padding:7px 6px;border:1px solid #ddd;font-size:12px;text-align:right}.report-table th:first-child,.report-table td:first-child{text-align:left;white-space:nowrap}.protein-gray{background:#e5e5e8}.protein-yellow{background:#fff3bf}.protein-green{background:#d9f2df}
+@media print{header,.tabs,.report-controls,.no-print{display:none!important}body{background:#fff}main{max-width:none;margin:0;padding:0}.card{box-shadow:none;border-radius:0;padding:0;margin:0}.report-scroll{overflow:visible}.report-table{min-width:0}.report-table th,.report-table td{font-size:9pt;padding:4px}#reportPrintArea h2{font-size:16pt}#reportPrintArea .muted{font-size:9pt}}
 </style>
 </head>
 <body>
@@ -65,6 +67,7 @@ form{padding:18px}
 <nav class="tabs">
 <button data-tab="today" class="active">Today</button>
 <button data-tab="history">History</button>
+<button data-tab="reports">Reports</button>
 <button data-tab="foods">Foods</button>
 <button data-tab="bugs">Bugs</button>
 <button data-tab="settings">Settings</button>
@@ -554,12 +557,63 @@ function bindMedChecks(){document.querySelectorAll(".medCheck").forEach(x=>x.onc
 
 async function render(){
   document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
-  pageTitle.textContent=tab==="today"?"Food Log":tab==="history"?"History":tab==="foods"?"Foods":tab==="bugs"?"Bug Reports":"Settings";
+  pageTitle.textContent=tab==="today"?"Food Log":tab==="history"?"History":tab==="reports"?"Reports":tab==="foods"?"Foods":tab==="bugs"?"Bug Reports":"Settings";
   if(tab==="today") await renderToday();
   else if(tab==="history") await renderHistory();
+  else if(tab==="reports") await renderReports();
   else if(tab==="foods") await renderFoods();
   else if(tab==="bugs") await renderBugs();
   else await renderSettings();
+}
+
+
+function reportRangePreset(preset){
+  const end=parseDay(localDay()); let start=new Date(end);
+  if(preset==="week") start=addDays(end,-6);
+  else if(preset==="month") start=new Date(end.getFullYear(),end.getMonth(),1);
+  else if(preset==="quarter") start=new Date(end.getFullYear(),end.getMonth()-2,1);
+  else if(preset==="year") start=new Date(end.getFullYear(),0,1);
+  return {start:localDay(start),end:localDay(end)};
+}
+function reportProteinClass(g,yellow,green){return g>=green?"protein-green":g>=yellow?"protein-yellow":"protein-gray"}
+function reportPeriodLabel(start,end){return `${formatDate(parseDay(start),{month:"short",day:"numeric",year:"numeric"})} – ${formatDate(parseDay(end),{month:"short",day:"numeric",year:"numeric"})}`}
+function eachDay(start,end){const out=[];for(let d=parseDay(start),z=parseDay(end);d<=z;d=addDays(d,1))out.push(localDay(d));return out}
+async function reportStats(entries,start,end){
+  const food=entries.filter(e=>canonicalMeal(e.meal)!=="Water"), cats=await categoryServingTotals(food), protein=await proteinTotal(food);
+  return {cats,protein,water:waterTotal(entries),days:eachDay(start,end).length};
+}
+async function buildReportRows(type,start,end,entries){
+  const periods=[];
+  if(type==="daily") eachDay(start,end).forEach(d=>periods.push({start:d,end:d,label:formatDate(parseDay(d),{month:"short",day:"numeric",year:"numeric"})}));
+  else if(type==="weekly"){
+    let d=parseDay(start), stop=parseDay(end);
+    while(d<=stop){let e=addDays(d,6);if(e>stop)e=stop;periods.push({start:localDay(d),end:localDay(e),label:`${formatDate(d,{month:"short",day:"numeric"})}–${formatDate(e,{month:"short",day:"numeric"})}`});d=addDays(e,1)}
+  }else{
+    let d=new Date(parseDay(start).getFullYear(),parseDay(start).getMonth(),1), stop=parseDay(end);
+    while(d<=stop){let a=d<parseDay(start)?parseDay(start):d;let e=new Date(d.getFullYear(),d.getMonth()+1,0);if(e>stop)e=stop;periods.push({start:localDay(a),end:localDay(e),label:formatDate(d,{month:"long",year:"numeric"})});d=new Date(d.getFullYear(),d.getMonth()+1,1)}
+  }
+  const rows=[]; for(const p of periods){const es=entries.filter(e=>e.date>=p.start&&e.date<=p.end);rows.push({...p,...await reportStats(es,p.start,p.end)});} return rows;
+}
+async function renderReports(){
+  const preset=await getSetting("reportPreset","month"), type=await getSetting("reportType","daily"), r=reportRangePreset(preset==="custom"?"month":preset);
+  const start=await getSetting("reportStart",r.start), end=await getSetting("reportEnd",r.end);
+  app.innerHTML=`<section class="card report-controls"><h2 style="margin-top:0">Ready-to-Print Reports</h2>
+    <label>Report</label><select id="reportType"><option value="daily" ${type==="daily"?"selected":""}>Daily Detail</option><option value="weekly" ${type==="weekly"?"selected":""}>Weekly Summary</option><option value="monthly" ${type==="monthly"?"selected":""}>Monthly Summary</option></select>
+    <label>Period</label><select id="reportPreset"><option value="week" ${preset==="week"?"selected":""}>Last 7 Days</option><option value="month" ${preset==="month"?"selected":""}>This Month</option><option value="quarter" ${preset==="quarter"?"selected":""}>This Quarter (3 months)</option><option value="year" ${preset==="year"?"selected":""}>This Year</option><option value="custom" ${preset==="custom"?"selected":""}>Custom Dates</option></select>
+    <div class="copygrid"><div><label>Start</label><input id="reportStart" type="date" value="${start}"></div><div><label>End</label><input id="reportEnd" type="date" value="${end}"></div></div>
+    <div class="toolbar2" style="margin-top:12px"><button id="runReport">Generate Report</button><button id="printReport" class="secondary">Print Report</button></div></section><div id="reportPrintArea"></div>`;
+  const generate=async()=>{
+    let a=reportStart.value,b=reportEnd.value;if(!a||!b||a>b){alert("Choose a valid report date range.");return}
+    await setSetting("reportType",reportType.value);await setSetting("reportPreset",reportPreset.value);await setSetting("reportStart",a);await setSetting("reportEnd",b);
+    const entries=await all("entries"), rows=await buildReportRows(reportType.value,a,b,entries), {yellow,green}=await proteinThresholds();
+    const cats=[...new Set(rows.flatMap(x=>Object.keys(x.cats)))].sort();
+    const heads=cats.map(c=>`<th>${esc(c)}</th>`).join("");
+    const body=rows.map(x=>`<tr><td>${esc(x.label)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c])}</td>`).join("")}<td class="${reportProteinClass(x.protein,yellow,green)}">${fmt(x.protein)}g</td><td>${fmt(x.water)} oz</td></tr>`).join("");
+    const totalProtein=rows.reduce((n,x)=>n+x.protein,0), totalWater=rows.reduce((n,x)=>n+x.water,0), targetDays= type==="daily"?rows.filter(x=>x.protein>=green).length:null;
+    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">Food Log — ${reportType.options[reportType.selectedIndex].text}</h2><div class="muted" style="margin:5px 0 12px">${reportPeriodLabel(a,b)} · Generated ${new Date().toLocaleDateString()}</div><div class="report-scroll"><table class="report-table"><thead><tr><th>${reportType.value==="daily"?"Date":"Period"}</th>${heads}<th>Protein</th><th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+3}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g · Yellow ${yellow}–${green-1}g · Green ≥ ${green}g.${targetDays==null?"":` Days meeting green target: ${targetDays} of ${rows.length}.`} Total protein shown across report rows: ${fmt(totalProtein)}g · Water: ${fmt(totalWater)} oz.</div></section>`;
+  };
+  reportPreset.onchange=()=>{if(reportPreset.value!=="custom"){const x=reportRangePreset(reportPreset.value);reportStart.value=x.start;reportEnd.value=x.end}};
+  runReport.onclick=generate;printReport.onclick=async()=>{await generate();window.print()}; await generate();
 }
 
 async function renderToday(){
@@ -1231,7 +1285,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Recipe + Previous Meals</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Reports Final</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
