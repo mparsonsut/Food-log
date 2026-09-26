@@ -622,7 +622,10 @@ async function renderToday(){
 
   for(const mealName of MEALS){
     const es=foodEntries.filter(e=>canonicalMeal(e.meal)===mealName);
-    h+=`<section class="card"><div class="section-title"><h2>${mealName}</h2><button class="smallbtn addMeal" data-meal="${mealName}">+ Add Food</button></div>
+    h+=`<section class="card"><div class="section-title"><h2>${mealName}</h2><div class="toolbar2" style="margin-left:auto;justify-content:flex-end">
+      <button class="smallbtn addMeal" data-meal="${mealName}">+ Add Food</button>
+      <button class="secondary smallbtn todayRepeatMeal" data-meal="${mealName}">Repeat Previous</button>
+      <button class="secondary smallbtn todayCopyMeal" data-meal="${mealName}">Copy From</button></div></div>
     ${es.length?es.map(e=>entryRow(e,true)).join(""):'<div class="empty">No entries</div>'}</section>`;
   }
 
@@ -635,6 +638,8 @@ async function renderToday(){
   topAdd.onclick=()=>openFood({date:localDay()});
   addWater.onclick=()=>openWater({date:localDay()});
   document.querySelectorAll(".addMeal").forEach(b=>b.onclick=()=>openFood({date:localDay(),meal:b.dataset.meal}));
+  document.querySelectorAll(".todayRepeatMeal").forEach(b=>b.onclick=()=>repeatPreviousMeal(localDay(),b.dataset.meal));
+  document.querySelectorAll(".todayCopyMeal").forEach(b=>b.onclick=()=>openCopyDialog(localDay(),b.dataset.meal));
   document.querySelectorAll(".quickFood").forEach(b=>b.onclick=()=>openFood({date:localDay(),foodName:b.dataset.food}));
   bindEntryButtons();
   bindMedChecks();
@@ -786,7 +791,7 @@ async function repeatPreviousMeal(targetDate,mealName){
   const existing=entries.some(e=>e.date===targetDate && canonicalMeal(e.meal)===mealName);
   if(existing && !confirm(mealName+" already has entries on this date. Add the previous meal anyway?")) return;
   await copyEntries(sourceEntries,targetDate);
-  renderHistoryBody();
+  if(tab==="today") await renderToday(); else await renderHistoryBody();
 }
 function openCopyDialog(targetDate,mealName){
   copyMealName={targetDate,mealName};
@@ -807,7 +812,8 @@ confirmCopy.onclick=async e=>{
   const existing=entries.some(x=>x.date===copyMealName.targetDate && canonicalMeal(x.meal)===copyMealName.mealName);
   if(existing && !confirm(copyMealName.mealName+" already has entries on the target date. Add the copied meal anyway?")) return;
   await copyEntries(source,copyMealName.targetDate);
-  copyDialog.close(); copyMealName=null; await renderHistoryBody();
+  copyDialog.close(); copyMealName=null;
+  if(tab==="today") await renderToday(); else await renderHistoryBody();
 };
 async function copyEntries(source,targetDate){
   for(const e of source){
@@ -1225,7 +1231,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Food Selection Update</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Recipe + Previous Meals</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1654,7 +1660,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Food Selection Update",
+    appVersion:"5.3 Recipe + Previous Meals",
     userAgent:navigator.userAgent
   });
 
@@ -1764,6 +1770,14 @@ function riHTML(item={}){
       <div class="suggestions riSuggestions"></div>
     </div>
     <div class="muted riStandard" style="margin:6px 0"></div>
+    <button type="button" class="secondary smallbtn riAddNew" style="display:none;margin:4px 0 8px">+ Add as New Food</button>
+    <div class="riNewFood" style="display:none;border:1px solid #ddd;border-radius:10px;padding:10px;margin:6px 0 10px">
+      <b>Add this food without leaving the recipe</b>
+      <div class="copygrid"><div><label>Standard quantity</label><input class="riNewQty" value="1"></div><div><label>Unit</label><select class="riNewUnit">${["cup","tbsp","tsp","oz","lb","gram","slice","piece","serving","bowl","glass","small","medium","large"].map(u=>`<option>${u}</option>`).join("")}</select></div></div>
+      <label>Protein per standard serving (grams)</label><input class="riNewProtein" type="number" min="0" step="0.1" inputmode="decimal" value="0">
+      <label>Category</label><select class="riNewCategory">${["Meat/Fish/Eggs","Legumes/Nuts","Fruit","Vegetables","Carb / Starch","Dairy","Fat","Sugar / Sweets","Beverage","Other"].map(c=>`<option>${c}</option>`).join("")}</select>
+      <div class="actions"><button type="button" class="secondary smallbtn riNewCancel">Cancel</button><button type="button" class="smallbtn riNewSave">Save Food + Add Ingredient</button></div>
+    </div>
     <div class="copygrid">
       <div><label>Quantity</label><input class="riQty" value="${esc(item.quantity||"1")}"></div>
       <div><label>Unit</label><select class="riUnit">${["cup","tbsp","tsp","oz","lb","gram","slice","piece","serving","bowl","glass","small","medium","large"].map(u=>`<option ${u===item.unit?"selected":""}>${u}</option>`).join("")}</select></div>
@@ -1778,6 +1792,8 @@ async function setupRecipeIngredientRow(row,item={}){
   const qty=row.querySelector(".riQty");
   const unit=row.querySelector(".riUnit");
   const std=row.querySelector(".riStandard");
+  const addNew=row.querySelector(".riAddNew");
+  const newBox=row.querySelector(".riNewFood");
 
   const showStandard=(f)=>{
     if(!f){
@@ -1805,6 +1821,8 @@ async function setupRecipeIngredientRow(row,item={}){
 
   const drawSuggestions=()=>{
     const q=input.value.trim().toLowerCase();
+    const exact=foods.some(f=>f.name.toLowerCase()===q);
+    addNew.style.display=(q && !exact)?"inline-block":"none";
     if(!q){
       const matches=[...foods].sort((a,b)=>a.name.localeCompare(b.name)).slice(0,15);
       box.innerHTML=matches.map(f=>{
@@ -1840,6 +1858,26 @@ async function setupRecipeIngredientRow(row,item={}){
         if(f) choose(f,false);
       };
     });
+  };
+
+  addNew.onclick=()=>{
+    if(!input.value.trim()) return;
+    newBox.style.display="block";
+    box.style.display="none";
+  };
+  row.querySelector(".riNewCancel").onclick=()=>{newBox.style.display="none";};
+  row.querySelector(".riNewSave").onclick=async()=>{
+    const name=input.value.trim();
+    if(!name) return;
+    const existing=(await all("foods")).find(f=>f.name.toLowerCase()===name.toLowerCase());
+    if(existing){ choose(existing,false); newBox.style.display="none"; addNew.style.display="none"; return; }
+    const standardQuantity=row.querySelector(".riNewQty").value.trim()||"1";
+    const standardUnit=row.querySelector(".riNewUnit").value;
+    const newFood={name,quantity:standardQuantity,unit:standardUnit,standardQuantity,standardUnit,category:row.querySelector(".riNewCategory").value,proteinGrams:Math.max(0,Number(row.querySelector(".riNewProtein").value)||0)};
+    await put("foods",newFood);
+    foods.push(newFood); foods.sort((a,b)=>a.name.localeCompare(b.name));
+    choose(newFood,false);
+    newBox.style.display="none"; addNew.style.display="none";
   };
 
   input.oninput=()=>{
