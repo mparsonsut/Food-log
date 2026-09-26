@@ -606,11 +606,28 @@ async function renderReports(){
     let a=reportStart.value,b=reportEnd.value;if(!a||!b||a>b){alert("Choose a valid report date range.");return}
     await setSetting("reportType",reportType.value);await setSetting("reportPreset",reportPreset.value);await setSetting("reportStart",a);await setSetting("reportEnd",b);
     const entries=await all("entries"), rows=await buildReportRows(reportType.value,a,b,entries), {yellow,green}=await proteinThresholds();
+    const reportDays=eachDay(a,b), dayCount=reportDays.length;
+    const dailyStats=[];
+    for(const d of reportDays){const es=entries.filter(e=>e.date===d);dailyStats.push({date:d,logged:es.some(e=>canonicalMeal(e.meal)!=="Water"),...(await reportStats(es,d,d))});}
+    const daysLogged=dailyStats.filter(x=>x.logged).length;
+    const targetDays=dailyStats.filter(x=>x.protein>=green).length;
+    const totalProtein=dailyStats.reduce((n,x)=>n+x.protein,0), avgProtein=dayCount?totalProtein/dayCount:0;
+    const totalWater=dailyStats.reduce((n,x)=>n+x.water,0);
     const cats=[...new Set(rows.flatMap(x=>Object.keys(x.cats)))].sort();
+    const isDaily=reportType.value==="daily";
     const heads=cats.map(c=>`<th>${esc(c)}</th>`).join("");
-    const body=rows.map(x=>`<tr><td>${esc(x.label)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c])}</td>`).join("")}<td class="${reportProteinClass(x.protein,yellow,green)}">${fmt(x.protein)}g</td><td>${fmt(x.water)} oz</td></tr>`).join("");
-    const totalProtein=rows.reduce((n,x)=>n+x.protein,0), totalWater=rows.reduce((n,x)=>n+x.water,0), targetDays= type==="daily"?rows.filter(x=>x.protein>=green).length:null;
-    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">Food Log — ${reportType.options[reportType.selectedIndex].text}</h2><div class="muted" style="margin:5px 0 12px">${reportPeriodLabel(a,b)} · Generated ${new Date().toLocaleDateString()}</div><div class="report-scroll"><table class="report-table"><thead><tr><th>${reportType.value==="daily"?"Date":"Period"}</th>${heads}<th>Protein</th><th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+3}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g · Yellow ${yellow}–${green-1}g · Green ≥ ${green}g.${targetDays==null?"":` Days meeting green target: ${targetDays} of ${rows.length}.`} Total protein shown across report rows: ${fmt(totalProtein)}g · Water: ${fmt(totalWater)} oz.</div></section>`;
+    const body=rows.map(x=>{
+      const divisor=isDaily?1:Math.max(1,x.days);
+      const proteinShown=x.protein/divisor;
+      return `<tr><td>${esc(x.label)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c]/divisor)}</td>`).join("")}<td class="${reportProteinClass(proteinShown,yellow,green)}">${fmt(proteinShown)}g${isDaily?"":"/day"}</td><td>${fmt(x.water)} oz</td></tr>`;
+    }).join("");
+    const reportName=reportType.options[reportType.selectedIndex].text;
+    const title=`Food Servings & Protein — ${reportName}`;
+    const basis=isDaily
+      ? `Daily food-category values are servings · Protein shown for each day`
+      : `Food-category values are average daily servings · Protein average based on ${dayCount} calendar day${dayCount===1?"":"s"}`;
+    const avgStatus=reportProteinClass(avgProtein,yellow,green);
+    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">${title}</h2><div class="muted" style="margin:5px 0 4px">${reportPeriodLabel(a,b)} · ${dayCount}-day reporting period · Generated ${new Date().toLocaleDateString()}</div><div class="muted" style="margin:0 0 12px">${basis}</div><div class="summary" style="margin-bottom:12px"><div class="metric ${avgStatus}"><b>${fmt(avgProtein)}g/day</b>Average Protein</div><div class="metric"><b>${targetDays} of ${dayCount}</b>Green Target (${dayCount?Math.round(targetDays/dayCount*100):0}%)</div><div class="metric"><b>${daysLogged} of ${dayCount}</b>Days Logged</div></div><div class="report-scroll"><table class="report-table"><thead><tr><th>${isDaily?"Date":"Period"}</th>${heads}<th>${isDaily?"Protein":"Avg Protein"}</th><th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+3}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g/day · Yellow ${yellow}–${green-1}g/day · Green ≥ ${green}g/day. Average protein is calculated across all ${dayCount} calendar days in the selected period, including days with no food logged. ${daysLogged} of ${dayCount} days contain logged food. Water shown in the table remains the total ounces for each row period; total water for the selected report period: ${fmt(totalWater)} oz.</div></section>`;
   };
   reportPreset.onchange=()=>{if(reportPreset.value!=="custom"){const x=reportRangePreset(reportPreset.value);reportStart.value=x.start;reportEnd.value=x.end}};
   runReport.onclick=generate;printReport.onclick=async()=>{await generate();window.print()}; await generate();
@@ -1285,7 +1302,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Reports Final</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Average Reports</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
