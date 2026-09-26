@@ -619,15 +619,19 @@ async function renderReports(){
     const body=rows.map(x=>{
       const divisor=isDaily?1:Math.max(1,x.days);
       const proteinShown=x.protein/divisor;
-      return `<tr><td>${esc(x.label)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c]/divisor)}</td>`).join("")}<td class="${reportProteinClass(proteinShown,yellow,green)}">${fmt(proteinShown)}g${isDaily?"":"/day"}</td><td>${fmt(x.water)} oz</td></tr>`;
+      const rowDaily=isDaily?[]:dailyStats.filter(d=>d.date>=x.start&&d.date<=x.end);
+      const rowLogged=isDaily?0:rowDaily.filter(d=>d.logged).length;
+      const rowTarget=isDaily?0:rowDaily.filter(d=>d.protein>=green).length;
+      const periodLabel=isDaily?x.label:`${x.label} (${x.days} day${x.days===1?"":"s"})`;
+      return `<tr><td>${esc(periodLabel)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c]/divisor)}</td>`).join("")}<td class="${reportProteinClass(proteinShown,yellow,green)}">${fmt(proteinShown)}g${isDaily?"":"/day"}</td>${isDaily?"":`<td>${rowTarget} of ${x.days} (${x.days?Math.round(rowTarget/x.days*100):0}%)</td><td>${rowLogged} of ${x.days}</td>`}<td>${fmt(x.water)} oz</td></tr>`;
     }).join("");
     const reportName=reportType.options[reportType.selectedIndex].text;
     const title=`Food Servings & Protein — ${reportName}`;
     const basis=isDaily
       ? `Daily food-category values are servings · Protein shown for each day`
-      : `Food-category values are average daily servings · Protein average based on ${dayCount} calendar day${dayCount===1?"":"s"}`;
+      : `Each row shows average daily servings and protein for that individual ${reportType.value==="weekly"?"week":"month"}; each row uses its own included calendar days`;
     const avgStatus=reportProteinClass(avgProtein,yellow,green);
-    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">${title}</h2><div class="muted" style="margin:5px 0 4px">${reportPeriodLabel(a,b)} · ${dayCount}-day reporting period · Generated ${new Date().toLocaleDateString()}</div><div class="muted" style="margin:0 0 12px">${basis}</div><div class="summary" style="margin-bottom:12px"><div class="metric ${avgStatus}"><b>${fmt(avgProtein)}g/day</b>Average Protein</div><div class="metric"><b>${targetDays} of ${dayCount}</b>Green Target (${dayCount?Math.round(targetDays/dayCount*100):0}%)</div><div class="metric"><b>${daysLogged} of ${dayCount}</b>Days Logged</div></div><div class="report-scroll"><table class="report-table"><thead><tr><th>${isDaily?"Date":"Period"}</th>${heads}<th>${isDaily?"Protein":"Avg Protein"}</th><th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+3}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g/day · Yellow ${yellow}–${green-1}g/day · Green ≥ ${green}g/day. Average protein is calculated across all ${dayCount} calendar days in the selected period, including days with no food logged. ${daysLogged} of ${dayCount} days contain logged food. Water shown in the table remains the total ounces for each row period; total water for the selected report period: ${fmt(totalWater)} oz.</div></section>`;
+    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">${title}</h2><div class="muted" style="margin:5px 0 4px">${reportPeriodLabel(a,b)} · ${dayCount}-day reporting period · Generated ${new Date().toLocaleDateString()}</div><div class="muted" style="margin:0 0 12px">${basis}</div><div class="summary" style="margin-bottom:12px"><div class="metric ${avgStatus}"><b>${fmt(avgProtein)}g/day</b>Average Protein</div><div class="metric"><b>${targetDays} of ${dayCount}</b>Green Target (${dayCount?Math.round(targetDays/dayCount*100):0}%)</div><div class="metric"><b>${daysLogged} of ${dayCount}</b>Days Logged</div></div><div class="report-scroll"><table class="report-table"><thead><tr><th>${isDaily?"Date":"Period"}</th>${heads}<th>${isDaily?"Protein":"Avg Protein"}</th>${isDaily?"":"<th>Green Target</th><th>Days Logged</th>"}<th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+(isDaily?3:5)}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g/day · Yellow ${yellow}–${green-1}g/day · Green ≥ ${green}g/day. The summary cards above describe the full ${dayCount}-day selected reporting period. In the table, each ${isDaily?"day":"row"} is calculated only from the calendar days included in that ${isDaily?"day":reportType.value==="weekly"?"week":"month"}, including unlogged days. For grouped reports, the period label shows the exact denominator and Green Target / Days Logged use that same row-specific day count. Water shown in the table remains the total ounces for each row period; total water for the selected report period: ${fmt(totalWater)} oz.</div></section>`;
   };
   reportPreset.onchange=()=>{if(reportPreset.value!=="custom"){const x=reportRangePreset(reportPreset.value);reportStart.value=x.start;reportEnd.value=x.end}};
   runReport.onclick=generate;printReport.onclick=async()=>{await generate();window.print()}; await generate();
@@ -1302,7 +1306,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Average Reports</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3 Row-Based Report Averages</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
