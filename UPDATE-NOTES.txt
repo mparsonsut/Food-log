@@ -1,0 +1,11 @@
+Food Log V5.3.1 — Water Goals + Report Averages
+
+Settings > Water Targets: edit Yellow and daily Green goal, then tap Save Water Targets. Starting values: Yellow 48 oz; Green 64 oz.
+Today shows water consumed versus the daily goal with gray/yellow/green coloring.
+Reports show average water per day and days meeting the water goal. Weekly and monthly rows use only the calendar days in that row, including unlogged days. Daily detail shows actual ounces. The full-period total remains in the report note.
+Existing records, recipes, medicines, protein targets and cloud settings use the same storage as V5.3. No data reset or database migration is introduced.
+
+Installation: make a Full Backup in the current app. Upload index.html, service-worker.js, manifest.webmanifest, icon-192.png and icon-512.png to the existing website folder, replacing the matching files. Keep the same website address to retain local data. Reopen/refresh Safari. Settings should show Version 5.3.1 Water Goals + Report Averages.
+This ZIP has not been deployed to the live website.
+
+Validation: JavaScript syntax and report-generation checks for daily/weekly/monthly reports, partial weeks, missing days, goal counts, custom goal changes and invalid stored target fallback. Physical iPhone/Safari testing remains to be done.

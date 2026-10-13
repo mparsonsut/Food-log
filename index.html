@@ -575,6 +575,14 @@ function reportRangePreset(preset){
   else if(preset==="year") start=new Date(end.getFullYear(),0,1);
   return {start:localDay(start),end:localDay(end)};
 }
+async function waterThresholds(){
+  let yellow=Number(await getSetting("waterYellowThreshold",48));
+  let green=Number(await getSetting("waterGreenThreshold",64));
+  if(!Number.isFinite(yellow)||yellow<0) yellow=48;
+  if(!Number.isFinite(green)||green<=0) green=64;
+  if(yellow>=green) yellow=green*0.75;
+  return {yellow,green};
+}
 function reportProteinClass(g,yellow,green){return g>=green?"protein-green":g>=yellow?"protein-yellow":"protein-gray"}
 function reportPeriodLabel(start,end){return `${formatDate(parseDay(start),{month:"short",day:"numeric",year:"numeric"})} – ${formatDate(parseDay(end),{month:"short",day:"numeric",year:"numeric"})}`}
 function eachDay(start,end){const out=[];for(let d=parseDay(start),z=parseDay(end);d<=z;d=addDays(d,1))out.push(localDay(d));return out}
@@ -612,26 +620,28 @@ async function renderReports(){
     const daysLogged=dailyStats.filter(x=>x.logged).length;
     const targetDays=dailyStats.filter(x=>x.protein>=green).length;
     const totalProtein=dailyStats.reduce((n,x)=>n+x.protein,0), avgProtein=dayCount?totalProtein/dayCount:0;
-    const totalWater=dailyStats.reduce((n,x)=>n+x.water,0);
+    const totalWater=dailyStats.reduce((n,x)=>n+x.water,0), avgWater=dayCount?totalWater/dayCount:0;
+    const waterTargets=await waterThresholds(), waterTargetDays=dailyStats.filter(x=>x.water>=waterTargets.green).length;
     const cats=[...new Set(rows.flatMap(x=>Object.keys(x.cats)))].sort();
     const isDaily=reportType.value==="daily";
     const heads=cats.map(c=>`<th>${esc(c)}</th>`).join("");
     const body=rows.map(x=>{
       const divisor=isDaily?1:Math.max(1,x.days);
-      const proteinShown=x.protein/divisor;
+      const proteinShown=x.protein/divisor, waterShown=x.water/divisor;
       const rowDaily=isDaily?[]:dailyStats.filter(d=>d.date>=x.start&&d.date<=x.end);
       const rowLogged=isDaily?0:rowDaily.filter(d=>d.logged).length;
       const rowTarget=isDaily?0:rowDaily.filter(d=>d.protein>=green).length;
+      const rowWaterTarget=isDaily?0:rowDaily.filter(d=>d.water>=waterTargets.green).length;
       const periodLabel=isDaily?x.label:`${x.label} (${x.days} day${x.days===1?"":"s"})`;
-      return `<tr><td>${esc(periodLabel)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c]/divisor)}</td>`).join("")}<td class="${reportProteinClass(proteinShown,yellow,green)}">${fmt(proteinShown)}g${isDaily?"":"/day"}</td>${isDaily?"":`<td>${rowTarget} of ${x.days} (${x.days?Math.round(rowTarget/x.days*100):0}%)</td><td>${rowLogged} of ${x.days}</td>`}<td>${fmt(x.water)} oz</td></tr>`;
+      return `<tr><td>${esc(periodLabel)}</td>${cats.map(c=>`<td>${x.cats[c]==null?"—":fmt(x.cats[c]/divisor)}</td>`).join("")}<td class="${reportProteinClass(proteinShown,yellow,green)}">${fmt(proteinShown)}g${isDaily?"":"/day"}</td>${isDaily?"":`<td>${rowTarget} of ${x.days} (${x.days?Math.round(rowTarget/x.days*100):0}%)</td><td>${rowLogged} of ${x.days}</td>`}<td class="${reportProteinClass(waterShown,waterTargets.yellow,waterTargets.green)}">${fmt(waterShown)} oz${isDaily?"":"/day"}</td>${isDaily?"":`<td>${rowWaterTarget} of ${x.days} (${Math.round(rowWaterTarget/x.days*100)}%)</td>`}</tr>`;
     }).join("");
     const reportName=reportType.options[reportType.selectedIndex].text;
-    const title=`Food Servings & Protein — ${reportName}`;
+    const title=`Food Servings, Protein & Water — ${reportName}`;
     const basis=isDaily
-      ? `Daily food-category values are servings · Protein shown for each day`
-      : `Each row shows average daily servings and protein for that individual ${reportType.value==="weekly"?"week":"month"}; each row uses its own included calendar days`;
+      ? `Daily food-category values are servings · Protein and water shown for each day`
+      : `Each row shows average daily servings, protein and water for that individual ${reportType.value==="weekly"?"week":"month"}; each row uses its own included calendar days`;
     const avgStatus=reportProteinClass(avgProtein,yellow,green);
-    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">${title}</h2><div class="muted" style="margin:5px 0 4px">${reportPeriodLabel(a,b)} · ${dayCount}-day reporting period · Generated ${new Date().toLocaleDateString()}</div><div class="muted" style="margin:0 0 12px">${basis}</div><div class="summary" style="margin-bottom:12px"><div class="metric ${avgStatus}"><b>${fmt(avgProtein)}g/day</b>Average Protein</div><div class="metric"><b>${targetDays} of ${dayCount}</b>Green Target (${dayCount?Math.round(targetDays/dayCount*100):0}%)</div><div class="metric"><b>${daysLogged} of ${dayCount}</b>Days Logged</div></div><div class="report-scroll"><table class="report-table"><thead><tr><th>${isDaily?"Date":"Period"}</th>${heads}<th>${isDaily?"Protein":"Avg Protein"}</th>${isDaily?"":"<th>Green Target</th><th>Days Logged</th>"}<th>Water</th></tr></thead><tbody>${body||`<tr><td colspan="${cats.length+(isDaily?3:5)}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g/day · Yellow ${yellow}–${green-1}g/day · Green ≥ ${green}g/day. The summary cards above describe the full ${dayCount}-day selected reporting period. In the table, each ${isDaily?"day":"row"} is calculated only from the calendar days included in that ${isDaily?"day":reportType.value==="weekly"?"week":"month"}, including unlogged days. For grouped reports, the period label shows the exact denominator and Green Target / Days Logged use that same row-specific day count. Water shown in the table remains the total ounces for each row period; total water for the selected report period: ${fmt(totalWater)} oz.</div></section>`;
+    reportPrintArea.innerHTML=`<section class="card"><h2 style="margin:0">${title}</h2><div class="muted" style="margin:5px 0 4px">${reportPeriodLabel(a,b)} · ${dayCount}-day reporting period · Generated ${new Date().toLocaleDateString()}</div><div class="muted" style="margin:0 0 12px">${basis}</div><div class="summary" style="margin-bottom:12px"><div class="metric ${avgStatus}"><b>${fmt(avgProtein)}g/day</b>Average Protein</div><div class="metric"><b>${targetDays} of ${dayCount}</b>Green Target (${dayCount?Math.round(targetDays/dayCount*100):0}%)</div><div class="metric"><b>${daysLogged} of ${dayCount}</b>Days Logged</div><div class="metric ${reportProteinClass(avgWater,waterTargets.yellow,waterTargets.green)}"><b>${fmt(avgWater)} oz/day</b>Average Water</div><div class="metric"><b>${waterTargetDays} of ${dayCount}</b>Water Goal Met (${Math.round(waterTargetDays/dayCount*100)}%)</div></div><div class="report-scroll"><table class="report-table"><thead><tr><th>${isDaily?"Date":"Period"}</th>${heads}<th>${isDaily?"Protein":"Avg Protein"}</th>${isDaily?"":"<th>Green Target</th><th>Days Logged</th>"}<th>${isDaily?"Water":"Avg Water"}</th>${isDaily?"":"<th>Water Goal Met</th>"}</tr></thead><tbody>${body||`<tr><td colspan="${cats.length+(isDaily?3:6)}">No data</td></tr>`}</tbody></table></div><div class="notice">Protein ranges: Gray &lt; ${yellow}g/day · Yellow ${yellow}–${green-1}g/day · Green ≥ ${green}g/day. The summary cards above describe the full ${dayCount}-day selected reporting period. In the table, each ${isDaily?"day":"row"} is calculated only from the calendar days included in that ${isDaily?"day":reportType.value==="weekly"?"week":"month"}, including unlogged days. For grouped reports, the period label shows the exact denominator and Green Target / Days Logged use that same row-specific day count. Water ranges: Gray &lt; ${fmt(waterTargets.yellow)} oz/day · Yellow below ${fmt(waterTargets.green)} oz/day · Green ≥ ${fmt(waterTargets.green)} oz/day. Grouped water values are daily averages, including unlogged days; Water Goal Met counts individual days meeting the current green target. Total water for the selected report period: ${fmt(totalWater)} oz.</div></section>`;
   };
   reportPreset.onchange=()=>{if(reportPreset.value!=="custom"){const x=reportRangePreset(reportPreset.value);reportStart.value=x.start;reportEnd.value=x.end}};
   runReport.onclick=generate;printReport.onclick=async()=>{await generate();window.print()}; await generate();
@@ -644,12 +654,13 @@ async function renderToday(){
   const main=["Breakfast","Lunch","Dinner"].filter(m=>foodEntries.some(e=>canonicalMeal(e.meal)===m)).length;
   const snackSlots=MEALS.filter(m=>m.startsWith("Snack") && foodEntries.some(e=>canonicalMeal(e.meal)===m)).length;
   const waterOz=waterTotal(entries);
+  const waterTargets=await waterThresholds();
   const categoryServings=await categoryServingTotals(foodEntries);
   const proteinGrams=await proteinTotal(foodEntries);
   const proteinStyle=await proteinMetricStyle(proteinGrams);
 
   let h=`<section class="card"><div class="section-title"><h2>Today Summary</h2><button id="topAdd">Add Food</button></div>
-    <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${snackSlots}/4</b>Snack Times</div><div class="metric" style="${proteinStyle}"><b>${fmt(proteinGrams)}g</b>Protein</div><div class="metric"><b>${fmt(waterOz)}</b>Water oz</div></div>
+    <div class="summary"><div class="metric"><b>${main}/3</b>Main Meals</div><div class="metric"><b>${snackSlots}/4</b>Snack Times</div><div class="metric" style="${proteinStyle}"><b>${fmt(proteinGrams)}g</b>Protein</div><div class="metric ${reportProteinClass(waterOz,waterTargets.yellow,waterTargets.green)}"><b>${fmt(waterOz)} / ${fmt(waterTargets.green)} oz</b>Water Goal</div></div>
     <div class="chips">${Object.keys(categoryServings).sort().map(c=>`<span class="chip">${esc(c)}: ${fmt(categoryServings[c])}</span>`).join("")}</div></section>`;
 
   const showRecent=await getSetting("showRecent",true);
@@ -705,7 +716,7 @@ async function renderToday(){
   }
 
   const waterEntries=entries.filter(e=>canonicalMeal(e.meal)==="Water");
-  h+=`<section class="card"><div class="section-title"><div><h2>Water</h2><div class="muted">${fmt(waterOz)} oz today</div></div><button id="addWater" class="smallbtn">+ Add Water</button></div>
+  h+=`<section class="card"><div class="section-title"><div><h2>Water</h2><div class="muted">${fmt(waterOz)} of ${fmt(waterTargets.green)} oz goal today</div></div><button id="addWater" class="smallbtn">+ Add Water</button></div>
     ${waterEntries.length?waterEntries.map(e=>waterRow(e,true)).join(""):'<div class="empty">No water logged</div>'}</section>`;
 
   h+=await medCard(localDay());
@@ -1252,6 +1263,7 @@ async function renderSettings(){
   const defaultSummary=await getSetting("historySummary","quantity");
   const {yellow:proteinYellowThreshold,green:proteinGreenThreshold}=await proteinThresholds();
   const cats=await categoryNames();
+  const waterTargets=await waterThresholds();
 
   app.innerHTML=`<section class="card">
     <h2 style="margin-top:0">Display</h2>
@@ -1273,6 +1285,14 @@ async function renderSettings(){
     <div class="notice">Current ranges: Gray &lt; ${proteinYellowThreshold}g · Yellow ${proteinYellowThreshold}–${proteinGreenThreshold-1}g · Green ≥ ${proteinGreenThreshold}g</div>
   </section>
 
+  <section class="card">
+    <h2 style="margin-top:0">Water Targets</h2>
+    <div class="muted">Set your daily water goal and color levels in fluid ounces.</div>
+    <label>Yellow starts at (oz)</label><input id="setWaterYellow" type="number" min="0" step="any" inputmode="decimal" value="${waterTargets.yellow}">
+    <label>Daily goal / Green starts at (oz)</label><input id="setWaterGreen" type="number" min="0.1" step="any" inputmode="decimal" value="${waterTargets.green}">
+    <button id="saveWaterTargets" style="margin-top:12px">Save Water Targets</button>
+    <div class="notice">Gray below ${fmt(waterTargets.yellow)} oz · Yellow below ${fmt(waterTargets.green)} oz · Green at or above ${fmt(waterTargets.green)} oz. These targets also apply to report averages.</div>
+  </section>
   <section class="card">
     <div class="section-title"><div><h2 style="margin:0">Categories</h2><div class="muted">Used when saving and logging foods</div></div>
       <button id="addCategory">+</button></div>
@@ -1306,7 +1326,7 @@ async function renderSettings(){
     <div id="dataStatus" class="muted">Checking storage…</div>
     <button id="refreshDataStatus" class="secondary" style="margin-top:10px">Refresh Data Status</button>
   </section>
-  <section class="card"><div class="muted">Food Log PWA Version 5.3 Row-Based Report Averages</div></section>`;
+  <section class="card"><div class="muted">Food Log PWA Version 5.3.1 Water Goals + Report Averages</div></section>`;
 
   refreshDataStatus.onclick=()=>updateDataStatus();
   updateDataStatus();
@@ -1320,6 +1340,13 @@ async function renderSettings(){
     await setSetting("proteinYellowThreshold",yellow);
     await setSetting("proteinGreenThreshold",green);
     renderSettings();
+  };
+  saveWaterTargets.onclick=async()=>{
+    const yellow=Number(setWaterYellow.value), green=Number(setWaterGreen.value);
+    if(!setWaterYellow.value.trim()||!setWaterGreen.value.trim()||!Number.isFinite(yellow)||!Number.isFinite(green)||yellow<0||green<=yellow){alert("Enter valid water targets: Yellow must be zero or more, and Green must be above Yellow.");return;}
+    await setSetting("waterYellowThreshold",yellow);
+    await setSetting("waterGreenThreshold",green);
+    await renderSettings();
   };
   setProteinYellow.onchange=saveProteinThresholds;
   setProteinGreen.onchange=saveProteinThresholds;
@@ -1735,7 +1762,7 @@ saveBug.onclick=async e=>{
     what,
     trying:bugTrying.value.trim(),
     expected:bugExpected.value.trim(),
-    appVersion:"5.3 Recipe + Previous Meals",
+    appVersion:"5.3.1 Water Goals + Report Averages",
     userAgent:navigator.userAgent
   });
 
